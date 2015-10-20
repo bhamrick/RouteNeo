@@ -7,7 +7,7 @@ import Pokemon.Type
 
 data Move =
     Move
-        { _name :: String
+        { _moveName :: String
         , _moveType :: Type
         , _pp :: Integer
         , _power :: Integer
@@ -22,19 +22,9 @@ makeLenses ''Move
 tackle :: Move
 tackle =
     Move
-        { _name = "Tackle"
+        { _moveName = "Tackle"
         , _moveType = Normal
         , _pp = 35
         , _power = 35
         , _accuracy = 243
-        }
-
-thunderbolt :: Move
-thunderbolt =
-    Move
-        { _name = "Thunderbolt"
-        , _moveType = Electric
-        , _pp = 15
-        , _power = 95
-        , _accuracy = 255
         }
