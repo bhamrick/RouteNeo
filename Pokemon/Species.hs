@@ -2,6 +2,8 @@
 module Pokemon.Species where
 
 import Control.Lens
+import Data.Map (Map)
+import qualified Data.Map as Map
 
 import Pokemon.Experience
 import Pokemon.Type
@@ -22,6 +24,9 @@ data Species =
     deriving (Eq, Show, Ord)
 
 makeLenses ''Species
+
+speciesByName :: Map String Species
+speciesByName = Map.fromList (map (\s -> (s^.name, s)) allSpecies)
 
 allSpecies :: [Species]
 allSpecies =

@@ -25,6 +25,27 @@ data TypeEffectiveness
     | Effective Int
     deriving (Eq, Show, Ord)
 
+data Physicality = Physical | Special
+    deriving (Eq, Show, Ord)
+
+physicality :: Type -> Physicality
+physicality t = case t of
+    Normal -> Physical
+    Fighting -> Physical
+    Flying -> Physical
+    Poison -> Physical
+    Ground -> Physical
+    Rock -> Physical
+    Bug -> Physical
+    Ghost -> Physical
+    Fire -> Special
+    Water -> Special
+    Grass -> Special
+    Electric -> Special
+    Psychic -> Special
+    Ice -> Special
+    Dragon -> Special
+
 super :: TypeEffectiveness
 super = Effective 1
 
