@@ -7,11 +7,15 @@ module Pokemon.Route where
 import Control.Lens
 import Control.Monad.Except
 import Control.Monad.State
+import Data.Foldable
+import qualified Data.Map as Map
 
 import Pokemon.Battle
+import Pokemon.Experience
 import Pokemon.Moves
 import Pokemon.Species
 import Pokemon.Stats
+import Pokemon.Trainer
 import Pokemon.Type
 
 data PartyPokemon =
@@ -30,6 +34,23 @@ data PartyPokemon =
 
 makeLenses ''PartyPokemon
 
+partyPokemon :: Species -> Integer -> DVs -> PartyPokemon
+partyPokemon s lvl dvs =
+    let
+    initialStats = computeStats s lvl dvs zeroStatExp
+    in
+    PartyPokemon
+        { _pSpecies = s
+        , _pExperience = lowestExpForLevel (s^.expCurve) lvl
+        , _pLevel = lvl
+        , _pDVs = dvs
+        , _pStatExp = zeroStatExp
+        , _pStatExpAtLevel = zeroStatExp
+        , _pStats = initialStats
+        , _pMoves = []
+        , _pCurHP = initialStats^.hpStat
+        }
+
 data RouteState =
     RouteState
         { _party :: [PartyPokemon]
@@ -37,6 +58,9 @@ data RouteState =
     deriving (Eq, Show, Ord)
 
 makeLenses ''RouteState
+
+emptyParty :: RouteState
+emptyParty = RouteState { _party = [] }
 
 newtype RouteT m a = RouteT { runRouteT :: StateT RouteState (ExceptT String m) a }
 
@@ -67,4 +91,42 @@ instance Monad m => MonadRoute (RouteT m)
 
 updateStats :: PartyPokemon -> PartyPokemon
 updateStats poke =
-    poke & pStats .~ computeStats (poke^.pSpecies) (poke^.pLevel) (poke^.pDVs) (poke^.pStatExp)
+    poke & pStats .~ computeStats (poke^.pSpecies) (poke^.pLevel) (poke^.pDVs) (poke^.pStatExpAtLevel)
+
+checkLevelUp :: PartyPokemon -> PartyPokemon
+checkLevelUp poke
+    | poke^.pLevel == 100 = poke
+    | poke^.pLevel > 100 = updateStats (poke & pLevel .~ 100 & pStatExpAtLevel .~ poke^.pStatExp)
+    | otherwise =
+        let
+        nextLevelExp = lowestExpForLevel (poke^.pSpecies.expCurve) (poke^.pLevel+1)
+        in
+        if poke^.pExperience >= nextLevelExp
+        then checkLevelUp (updateStats (poke & pLevel +~ 1 & pStatExpAtLevel .~ poke^.pStatExp))
+        else poke
+
+defeatPokemon :: MonadRoute m => Species -> Integer -> Bool -> Integer -> m ()
+defeatPokemon enemySpecies enemyLevel isTrainer participants = party._head %= defeatPokemon' enemySpecies enemyLevel isTrainer participants
+
+defeatPokemon' :: Species -> Integer -> Bool -> Integer -> PartyPokemon -> PartyPokemon
+defeatPokemon' enemySpecies enemyLevel isTrainer participants poke =
+    let
+    expGain = ((enemySpecies^.killExp `div` participants) * enemyLevel `div` 7) * 3 `div` (if isTrainer then 2 else 3)
+    in
+    poke
+        & pExperience +~ expGain
+        & pStatExp.hpStatExp +~ enemySpecies^.baseHP
+        & pStatExp.atkStatExp +~ enemySpecies^.baseAtk
+        & pStatExp.defStatExp +~ enemySpecies^.baseDef
+        & pStatExp.spdStatExp +~ enemySpecies^.baseSpd
+        & pStatExp.spcStatExp +~ enemySpecies^.baseSpc
+        & checkLevelUp
+
+defeatTrainer :: MonadRoute m => Integer -> m ()
+defeatTrainer offset = 
+    do
+        case Map.lookup offset trainersByOffset of
+            Nothing -> throwError ("Could not find trainer offset " ++ (show offset))
+            Just t ->
+                for_ (t^.tParty) $ \enemy ->
+                    party._head %= defeatPokemon' (enemy^.tpSpecies) (enemy^.tpLevel) True 1

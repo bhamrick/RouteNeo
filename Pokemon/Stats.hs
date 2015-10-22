@@ -45,8 +45,8 @@ data StatExp =
 
 makeLenses ''StatExp
 
-trainerStatExp :: StatExp
-trainerStatExp =
+zeroStatExp :: StatExp
+zeroStatExp =
     StatExp
         { _hpStatExp = 0
         , _atkStatExp = 0
