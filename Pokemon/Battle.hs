@@ -45,8 +45,5 @@ damage attacker defender move crit roll =
     effective =
         effectiveness (move^.moveType) (defender^.species.type1) <>
         fromMaybe mempty (effectiveness (move^.moveType) <$> (defender^.species.type2))
-    modifier =
-        (if stab then 3/2 else 1) *
-        (attackRatio effective)
     in
-    floor (fromInteger ((floor (fromInteger (attacker^.level) * (2/5) * (if crit then 2 else 1) + 2) * attack * (move^.power) `div` 50 `div` defense) + 2) * modifier) * roll `div` 255
+    floor (fromInteger (floor (fromInteger ((floor (fromInteger (attacker^.level) * (2/5) * (if crit then 2 else 1) + 2) * attack * (move^.power) `div` 50 `div` defense) + 2) * (if stab then 3/2 else 1))) * attackRatio effective) * roll `div` 255
