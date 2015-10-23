@@ -437,7 +437,7 @@ allTrainers =
     , trainer 0x3A3C1 LtSurge [(21, "Voltorb"), (18, "Pikachu"), (24, "Raichu")]
     , trainer 0x3A3C9 Erika [(29, "Victreebel"), (24, "Tangela"), (29, "Vileplume")]
     , trainer 0x3A3D1 Koga [(37, "Koffing"), (39, "Muk"), (37, "Koffing"), (43, "Weezing")]
-    , trainer 0x3A3D8 Blaine [(42, "Growlithe"), (40, "Ponyta"), (42, "Rapidash"), (47, "Arcanine")]
+    , trainer 0x3A3DB Blaine [(42, "Growlithe"), (40, "Ponyta"), (42, "Rapidash"), (47, "Arcanine")]
     , trainer 0x3A3E5 Sabrina [(38, "Kadabra"), (37, "MrMime"), (38, "Venomoth"), (43, "Alakazam")]
     , trainer 0x3A3EF Gentleman [(18, "Growlithe"), (18, "Growlithe")]
     , trainer 0x3A3F3 Gentleman [(19, "NidoranM"), (19, "NidoranF")]

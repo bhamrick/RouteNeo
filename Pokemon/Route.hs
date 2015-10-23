@@ -62,7 +62,10 @@ makeLenses ''RouteState
 emptyParty :: RouteState
 emptyParty = RouteState { _party = [] }
 
-newtype RouteT m a = RouteT { runRouteT :: StateT RouteState (ExceptT String m) a }
+newtype RouteT m a = RouteT { unRouteT :: StateT RouteState (ExceptT String m) a }
+
+runRouteT :: RouteT m a -> RouteState -> m (Either String (a, RouteState))
+runRouteT r s0 = runExceptT (runStateT (unRouteT r) s0)
 
 instance Functor m => Functor (RouteT m) where
     fmap f (RouteT a) = RouteT (fmap f a)
@@ -73,17 +76,20 @@ instance Monad m => Applicative (RouteT m) where
 
 instance Monad m => Monad (RouteT m) where
     return = RouteT . return
-    RouteT x >>= f = RouteT (x >>= runRouteT . f)
+    RouteT x >>= f = RouteT (x >>= unRouteT . f)
     fail = throwError
 
 instance Monad m => MonadError String (RouteT m) where
     throwError = RouteT . throwError
-    catchError (RouteT x) f = RouteT (catchError x (runRouteT . f))
+    catchError (RouteT x) f = RouteT (catchError x (unRouteT . f))
 
 instance Monad m => MonadState RouteState (RouteT m) where
     get = RouteT get
     put = RouteT . put
     state = RouteT . state
+
+instance MonadIO m => MonadIO (RouteT m) where
+    liftIO = RouteT . liftIO
 
 class (MonadError String m, MonadState RouteState m) => MonadRoute m
 
@@ -130,3 +136,18 @@ defeatTrainer offset =
             Just t ->
                 for_ (t^.tParty) $ \enemy ->
                     party._head %= defeatPokemon' (enemy^.tpSpecies) (enemy^.tpLevel) True 1
+
+evolveTo :: Species -> PartyPokemon -> PartyPokemon
+evolveTo s poke =
+    poke
+        & pSpecies .~ s
+        & pStatExpAtLevel .~ (poke^.pStatExp)
+        & updateStats
+
+rarecandy :: PartyPokemon -> PartyPokemon
+rarecandy poke
+    | poke^.pLevel == 100 = poke
+    | otherwise =
+        poke
+            & pExperience .~ lowestExpForLevel (poke^.pSpecies.expCurve) (poke^.pLevel + 1)
+            & checkLevelUp
