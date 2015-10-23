@@ -52,8 +52,8 @@ route = do
     party . _head %= defeatPokemon' (speciesByName Map.! "Zubat") 8 False 1
     party . _head %= defeatPokemon' (speciesByName Map.! "Zubat") 8 False 1
 
-    party . _head %= evolveTo (speciesByName Map.! "Nidorino")
-    party . _head %= evolveTo (speciesByName Map.! "Nidoking")
+    evolveTo "Nidorino"
+    evolveTo "Nidoking"
     
     defeatTrainer 0x3A29C
     defeatTrainer 0x39F2A

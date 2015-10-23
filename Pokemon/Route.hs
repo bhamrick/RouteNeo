@@ -138,8 +138,14 @@ defeatTrainer offset =
                 for_ (t^.tParty) $ \enemy ->
                     party._head %= defeatPokemon' (enemy^.tpSpecies) (enemy^.tpLevel) True 1
 
-evolveTo :: Species -> PartyPokemon -> PartyPokemon
-evolveTo s poke =
+evolveTo :: MonadRoute m => String -> m ()
+evolveTo sName =
+    case Map.lookup sName speciesByName of
+        Nothing -> throwError ("Could not find species " ++ sName)
+        Just s -> party . _head %= evolveTo' s
+
+evolveTo' :: Species -> PartyPokemon -> PartyPokemon
+evolveTo' s poke =
     poke
         & pSpecies .~ s
         & pStatExpAtLevel .~ (poke^.pStatExp)
