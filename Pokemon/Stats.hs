@@ -84,3 +84,7 @@ computeStats species level dvs statExp =
         , _spdStat = computeStat (species^.baseSpd) level (dvs^.spdDV) (statExp^.spdStatExp)
         , _spcStat = computeStat (species^.baseSpc) level (dvs^.spcDV) (statExp^.spcStatExp)
         }
+
+statRange :: Integer -> Integer -> Integer -> [Integer]
+statRange base lvl sexp =
+    map (\dv -> computeStat base lvl dv sexp) [0..15]

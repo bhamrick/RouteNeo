@@ -30,9 +30,13 @@ route = do
         , partyPokemon (speciesByName Map.! "Squirtle") 8 squirtleDVs
         ]
 
+    printStats
+    printRanges
+
     -- Defeat Brock
-    for_ ((trainersByOffset Map.! 0x3A3B5) ^. tParty) $ \enemy ->
+    for_ ((trainersByOffset Map.! 0x3A3B5) ^. tParty) $ \enemy -> do
         party . each %= defeatPokemon' (enemy^.tpSpecies) (enemy^.tpLevel) True 2
+        preuse (party . _head) >>= maybe (return ()) printRanges'
 
     -- Route 3
     defeatTrainer 0x39DDA
@@ -150,5 +154,8 @@ route = do
     defeatTrainer 0x3A522
     defeatTrainer 0x3A49F
 
+    printStats
+    printRanges
+
 main :: IO ()
-main = runRouteT route emptyParty >>= print
+main = void $ runRouteT route emptyParty

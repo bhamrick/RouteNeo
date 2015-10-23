@@ -9,6 +9,7 @@ import Control.Monad.Except
 import Control.Monad.State
 import Data.Foldable
 import qualified Data.Map as Map
+import Text.Printf
 
 import Pokemon.Battle
 import Pokemon.Experience
@@ -151,3 +152,42 @@ rarecandy poke
         poke
             & pExperience .~ lowestExpForLevel (poke^.pSpecies.expCurve) (poke^.pLevel + 1)
             & checkLevelUp
+
+printStats :: (MonadIO m, MonadRoute m) => m ()
+printStats = preuse (party . _head) >>= maybe (return ()) printStats'
+
+printStats' :: MonadIO m => PartyPokemon -> m ()
+printStats' poke = liftIO $ do
+    printf "L%d %s Exp Needed: %d/%d\n"
+        (poke^.pLevel)
+        (poke^.pSpecies.name)
+        (lowestExpForLevel (poke^.pSpecies.expCurve) (poke^.pLevel + 1) - poke^.pExperience)
+        (lowestExpForLevel (poke^.pSpecies.expCurve) (poke^.pLevel + 1) - lowestExpForLevel (poke^.pSpecies.expCurve) (poke^.pLevel))
+    printf "          HP   Atk   Def   Spd   Spc\n"
+    printf "       %5d %5d %5d %5d %5d\n" (poke^.pStats.hpStat) (poke^.pStats.atkStat) (poke^.pStats.defStat) (poke^.pStats.spdStat) (poke^.pStats.spcStat)
+    printf "DV     %5d %5d %5d %5d %5d\n" (poke^.pDVs.hpDV) (poke^.pDVs.atkDV) (poke^.pDVs.defDV) (poke^.pDVs.spdDV) (poke^.pDVs.spcDV)
+    printf "SExp   %5d %5d %5d %5d %5d\n" (poke^.pStatExp.hpStatExp) (poke^.pStatExp.atkStatExp) (poke^.pStatExp.defStatExp) (poke^.pStatExp.spdStatExp) (poke^.pStatExp.spcStatExp)
+    printf "\n"
+
+printRanges :: (MonadIO m, MonadRoute m) => m ()
+printRanges = preuse (party . _head) >>= maybe (return ()) printRanges'
+
+printRanges' :: MonadIO m => PartyPokemon -> m ()
+printRanges' poke = liftIO $ do
+    printf "L%d %s\n" (poke^.pLevel) (poke^.pSpecies.name)
+    printf "DV  |"
+    for_ [0 .. 15 :: Integer] $ \dv ->
+        printf "%4d|" dv
+    printf "\n"
+    printf (replicate (5*17) '-')
+    printf "\n"
+    printf "HP  |"
+    for_ [0 .. 15 :: Integer] $ \dv ->
+        printf "%4d|" (computeHP (poke^.pSpecies.baseHP) (poke^.pLevel) dv (poke^.pStatExp.hpStatExp))
+    printf "\n"
+    for_ [("Atk", baseAtk, atkStatExp), ("Def", baseDef, defStatExp), ("Spd", baseSpd, spdStatExp), ("Spc", baseSpc, spcStatExp)] $ \(statName, baseLens, statExpLens) -> do
+        printf "%s |" statName
+        for_ [0 .. 15 :: Integer] $ \dv ->
+            printf "%4d|" (computeStat (poke^.pSpecies.baseLens) (poke^.pLevel) dv (poke^.pStatExpAtLevel.statExpLens))
+        printf "\n"
+    printf "\n"
