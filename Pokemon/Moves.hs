@@ -2,6 +2,8 @@
 module Pokemon.Moves where
 
 import Control.Lens
+import Data.Map (Map)
+import qualified Data.Map as Map
 
 import Pokemon.Type
 
@@ -109,6 +111,9 @@ move name effect power ty acc_pct pp =
         , _power = power
         , _accuracy = acc_pct * 0xFF `div` 100
         }
+
+movesByName :: Map String Move
+movesByName = Map.fromList (map (\m -> (m^.moveName, m)) allMoves)
 
 allMoves =
     [ move "Pound" NoEffect 40 Normal 100 35

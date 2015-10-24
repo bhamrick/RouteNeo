@@ -30,6 +30,9 @@ route = do
         , partyPokemon (speciesByName Map.! "Squirtle") 8 squirtleDVs
         ]
 
+    learnMove "Leer"
+    learnMove "Tackle"
+
     printStats
     printRanges
 
@@ -38,11 +41,15 @@ route = do
         party . each %= defeatPokemon' (enemy^.tpSpecies) (enemy^.tpLevel) True 2
         preuse (party . _head) >>= maybe (return ()) printRanges'
 
+    learnMove "Horn Attack"
+
     -- Route 3
     defeatTrainer 0x39DDA
     defeatTrainer 0x39D99
     defeatTrainer 0x39DDF
     defeatTrainer 0x39DE5
+
+    learnMove "Poison Sting"
 
     -- Mt Moon
     defeatTrainer 0x39F26
@@ -66,6 +73,8 @@ route = do
     defeatTrainer 0x39E23
     party . _head %= rarecandy
     party . _head %= rarecandy
+    learnMove "Thrash"
+    unlearnMove "Leer"
     defeatTrainer 0x3A2B0
 
     -- Route 25
@@ -82,10 +91,17 @@ route = do
     defeatTrainer 0x3A2AC
     defeatTrainer 0x39EA4
     defeatTrainer 0x39E86
+
+    learnMove "Bubblebeam"
+    unlearnMove "Tackle"
+
     defeatTrainer 0x3A40B
 
     -- Vermillion Gym
     defeatTrainer 0x3A3C1
+
+    learnMove "Thunderbolt"
+    unlearnMove "Horn Attack"
 
     -- Route 9
     defeatTrainer 0x39EAC
@@ -101,6 +117,12 @@ route = do
     -- Route 8
     defeatTrainer 0x3A0CD
 
+    learnMove "Horn Drill"
+    unlearnMove "Bubblebeam"
+
+    learnMove "Rock Slide"
+    unlearnMove "Poison Sting"
+
     -- Lavender Tower
     defeatTrainer 0x3A42B
     defeatTrainer 0x3A4E3
@@ -110,6 +132,9 @@ route = do
     defeatTrainer 0x3A2ED
     defeatTrainer 0x3A2F2
     defeatTrainer 0x3A2F6
+
+    learnMove "Ice Beam"
+    unlearnMove "Rock Slide"
 
     -- Silph
     defeatTrainer 0x3A34B

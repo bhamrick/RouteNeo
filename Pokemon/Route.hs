@@ -197,3 +197,22 @@ printRanges' poke = liftIO $ do
             printf "%4d|" (computeStat (poke^.pSpecies.baseLens) (poke^.pLevel) dv (poke^.pStatExpAtLevel.statExpLens))
         printf "\n"
     printf "\n"
+
+learnMove :: MonadRoute m => String -> m ()
+learnMove name =
+    case Map.lookup name movesByName of
+        Nothing -> throwError ("Could not find move: " ++ name)
+        Just m -> party . _head %= learnMove' m
+
+learnMove' :: Move -> PartyPokemon -> PartyPokemon
+learnMove' m poke =
+    poke & pMoves .~ (poke^.pMoves ++ [m])
+
+unlearnMove :: MonadRoute m => String -> m ()
+unlearnMove name =
+    case Map.lookup name movesByName of
+        Nothing -> return ()
+        Just m -> party . _head %= unlearnMove' m
+
+unlearnMove' :: Move -> PartyPokemon -> PartyPokemon
+unlearnMove' m = pMoves %~ filter (/= m)
