@@ -100,11 +100,12 @@ instance Monad m => MonadBattle (BattleT m)
 
 printDamages :: MonadIO m => Participant -> Participant -> m ()
 printDamages attacker defender =
-    for_ (attacker^.moves) $ \m ->
-        let
-            minDamage = damage attacker defender m False minRange
-            maxDamage = damage attacker defender m False maxRange
-            minCrit = damage attacker defender m True minRange
-            maxCrit = damage attacker defender m True maxRange
-        in
-        printf "%s\t%d-%d\t(crit: %d-%d)\n" (m^.moveName) minDamage maxDamage minCrit maxCrit
+    liftIO $
+        for_ (attacker^.moves) $ \m ->
+            let
+                minDamage = damage attacker defender m False minRange
+                maxDamage = damage attacker defender m False maxRange
+                minCrit = damage attacker defender m True minRange
+                maxCrit = damage attacker defender m True maxRange
+            in
+            printf "%s\t%d-%d\t(crit: %d-%d)\n" (m^.moveName) minDamage maxDamage minCrit maxCrit
