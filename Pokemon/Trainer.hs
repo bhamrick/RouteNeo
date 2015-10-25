@@ -1,11 +1,16 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
 module Pokemon.Trainer where
 
 import Control.Lens
 import Data.Map (Map)
 import qualified Data.Map as Map
 
+import Pokemon.Battle
+import Pokemon.Moves
 import Pokemon.Species
+import Pokemon.Stats
 
 data TrainerClass
     = Youngster
@@ -81,6 +86,73 @@ tPokemon lvl name =
         { _tpSpecies = speciesByName Map.! name
         , _tpLevel = lvl
         }
+
+-- TODO: Move overrides
+trainerBattleParty :: Trainer -> [Participant]
+trainerBattleParty t =
+    t^.tParty
+        & map (\tp -> Participant
+            { _species = tp^.tpSpecies
+            , _level = tp^.tpLevel
+            , _partyStats = computeStats (tp^.tpSpecies) (tp^.tpLevel) trainerDVs zeroStatExp
+            , _battleStats = computeStats (tp^.tpSpecies) (tp^.tpLevel) trainerDVs zeroStatExp
+            , _moves = defaultMoves (tp^.tpSpecies) (tp^.tpLevel)
+            }
+        )
+        & moveOverride
+    where
+    moveOverride party =
+        case t^.tOffset of
+            -- Brock
+            0x3A3B5 ->
+                party & _last . moves %~ flip snoc (movesByName Map.! "Bide")
+            -- Misty
+            0x3A3BB ->
+                party & _last . moves %~ flip snoc (movesByName Map.! "Bubblebeam")
+            -- Surge
+            0x3A3C1 ->
+                party & _last . moves . ix 2 .~ (movesByName Map.! "Thunderbolt")
+            -- Erika
+            0x3A3C9 ->
+                party & _last . moves . ix 2 .~ (movesByName Map.! "Mega Drain")
+            -- Koga
+            0x3A3D1 ->
+                party & _last . moves . ix 2 .~ (movesByName Map.! "Toxic")
+            -- Sabrina
+            0x3A3E5 ->
+                party & _last . moves . ix 2 .~ (movesByName Map.! "Psywave")
+            -- Blaine
+            0x3A3DB ->
+                party & _last . moves . ix 2 .~ (movesByName Map.! "Fire Blast")
+            -- Giovanni (Gym)
+            0x3A290 ->
+                party & _last . moves . ix 2 .~ (movesByName Map.! "Fissure")
+            -- Lorelei
+            0x3A4BB ->
+                party & _last . moves . ix 2 .~ (movesByName Map.! "Blizzard")
+            -- Bruno
+            0x3A3A9 ->
+                party & _last . moves . ix 2 .~ (movesByName Map.! "Fissure")
+            -- Agatha
+            0x3A516 ->
+                party & _last . moves . ix 2 .~ (movesByName Map.! "Toxic")
+            -- Lance
+            0x3A522 ->
+                party & _last . moves . ix 2 .~ (movesByName Map.! "Barrier")
+            -- Champion
+            0x3A491 ->
+                party
+                    & ix 0 . moves . ix 2 .~ (movesByName Map.! "Sky Attack")
+                    & ix 5 . moves . ix 2 .~ (movesByName Map.! "Blizzard")
+            0x3A49F ->
+                party
+                    & ix 0 . moves . ix 2 .~ (movesByName Map.! "Sky Attack")
+                    & ix 5 . moves . ix 2 .~ (movesByName Map.! "Mega Drain")
+            0x3A4AD ->
+                party
+                    & ix 0 . moves . ix 2 .~ (movesByName Map.! "Sky Attack")
+                    & ix 5 . moves . ix 2 .~ (movesByName Map.! "Fire Blast")
+            _ -> party
 
 trainer :: Integer -> TrainerClass -> [(Integer, String)] -> Trainer
 trainer offset cls party =

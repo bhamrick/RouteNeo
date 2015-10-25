@@ -2,6 +2,7 @@
 module Pokemon.Species where
 
 import Control.Lens
+import Data.List
 import Data.Map (Map)
 import qualified Data.Map as Map
 
@@ -32,6 +33,10 @@ mkLearnset = each . _2 %~ (movesByName Map.!)
 
 speciesByName :: Map String Species
 speciesByName = Map.fromList (map (\s -> (s^.name, s)) allSpecies)
+
+defaultMoves :: Species -> Integer -> [Move]
+defaultMoves s lvl =
+    map snd . reverse . take 4 . reverse . nub . filter (\(l, _) -> l <= lvl) $ s^.learnset
 
 allSpecies :: [Species]
 allSpecies =
