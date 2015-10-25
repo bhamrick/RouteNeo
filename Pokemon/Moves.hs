@@ -117,7 +117,8 @@ movesByName = Map.fromList (map (\m -> (m^.moveName, m)) allMoves)
 
 allMoves =
     [ move "Pound" NoEffect 40 Normal 100 35
-    , move "Karate Chop" TwoToFiveAttacksEffect 50 Normal 100 25
+    , move "Karate Chop" NoEffect 50 Normal 100 25
+    , move "Doubleslap" TwoToFiveAttacksEffect 15 Normal 85 10
     , move "Comet Punch" TwoToFiveAttacksEffect 15 Normal 85 10
     , move "Mega Punch" NoEffect 80 Normal 85 20
     , move "Pay Day" PayDayEffect 40 Normal 100 20
