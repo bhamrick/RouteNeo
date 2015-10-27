@@ -10,10 +10,10 @@ Currently, RouteNeo is under active construction and is not very featureful.
 
 * Stat computation
 * Track experience and stat experience
+* Track moveset for party Pokemon
+* Automatically derive moveset for enemy pokemon
+* Print damage calculations
 
 ## Features Planned
 
-* Track moveset for party Pokemon
-* Print damage calculations
-* Automatically derive moveset for enemy pokemon
 * Simulate Trainer AI and battle state
