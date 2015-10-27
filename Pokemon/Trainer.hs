@@ -8,7 +8,9 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 
 import Pokemon.Battle
+import Pokemon.Experience
 import Pokemon.Moves
+import Pokemon.Party
 import Pokemon.Species
 import Pokemon.Stats
 
@@ -87,17 +89,24 @@ tPokemon lvl name =
         , _tpLevel = lvl
         }
 
--- TODO: Move overrides
-trainerBattleParty :: Trainer -> [Participant]
+trainerBattleParty :: Trainer -> [PartyPokemon]
 trainerBattleParty t =
     t^.tParty
-        & map (\tp -> Participant
-            { _species = tp^.tpSpecies
-            , _level = tp^.tpLevel
-            , _partyStats = computeStats (tp^.tpSpecies) (tp^.tpLevel) trainerDVs zeroStatExp
-            , _battleStats = computeStats (tp^.tpSpecies) (tp^.tpLevel) trainerDVs zeroStatExp
-            , _moves = defaultMoves (tp^.tpSpecies) (tp^.tpLevel)
-            }
+        & map (\tp ->
+            let
+            stats = computeStats (tp^.tpSpecies) (tp^.tpLevel) trainerDVs zeroStatExp
+            in
+            PartyPokemon
+                { _pSpecies = tp^.tpSpecies
+                , _pExperience = lowestExpForLevel (tp^.tpSpecies.expCurve) (tp^.tpLevel)
+                , _pLevel = tp^.tpLevel
+                , _pDVs = trainerDVs
+                , _pStatExp = zeroStatExp
+                , _pStatExpAtLevel = zeroStatExp
+                , _pStats = stats
+                , _pMoves = defaultMoves (tp^.tpSpecies) (tp^.tpLevel)
+                , _pCurHP = stats^.hpStat
+                }
         )
         & moveOverride
     where
@@ -105,53 +114,53 @@ trainerBattleParty t =
         case t^.tOffset of
             -- Brock
             0x3A3B5 ->
-                party & _last . moves %~ flip snoc (movesByName Map.! "Bide")
+                party & _last . pMoves %~ flip snoc (movesByName Map.! "Bide")
             -- Misty
             0x3A3BB ->
-                party & _last . moves %~ flip snoc (movesByName Map.! "Bubblebeam")
+                party & _last . pMoves %~ flip snoc (movesByName Map.! "Bubblebeam")
             -- Surge
             0x3A3C1 ->
-                party & _last . moves . ix 2 .~ (movesByName Map.! "Thunderbolt")
+                party & _last . pMoves . ix 2 .~ (movesByName Map.! "Thunderbolt")
             -- Erika
             0x3A3C9 ->
-                party & _last . moves . ix 2 .~ (movesByName Map.! "Mega Drain")
+                party & _last . pMoves . ix 2 .~ (movesByName Map.! "Mega Drain")
             -- Koga
             0x3A3D1 ->
-                party & _last . moves . ix 2 .~ (movesByName Map.! "Toxic")
+                party & _last . pMoves . ix 2 .~ (movesByName Map.! "Toxic")
             -- Sabrina
             0x3A3E5 ->
-                party & _last . moves . ix 2 .~ (movesByName Map.! "Psywave")
+                party & _last . pMoves . ix 2 .~ (movesByName Map.! "Psywave")
             -- Blaine
             0x3A3DB ->
-                party & _last . moves . ix 2 .~ (movesByName Map.! "Fire Blast")
+                party & _last . pMoves . ix 2 .~ (movesByName Map.! "Fire Blast")
             -- Giovanni (Gym)
             0x3A290 ->
-                party & _last . moves . ix 2 .~ (movesByName Map.! "Fissure")
+                party & _last . pMoves . ix 2 .~ (movesByName Map.! "Fissure")
             -- Lorelei
             0x3A4BB ->
-                party & _last . moves . ix 2 .~ (movesByName Map.! "Blizzard")
+                party & _last . pMoves . ix 2 .~ (movesByName Map.! "Blizzard")
             -- Bruno
             0x3A3A9 ->
-                party & _last . moves . ix 2 .~ (movesByName Map.! "Fissure")
+                party & _last . pMoves . ix 2 .~ (movesByName Map.! "Fissure")
             -- Agatha
             0x3A516 ->
-                party & _last . moves . ix 2 .~ (movesByName Map.! "Toxic")
+                party & _last . pMoves . ix 2 .~ (movesByName Map.! "Toxic")
             -- Lance
             0x3A522 ->
-                party & _last . moves . ix 2 .~ (movesByName Map.! "Barrier")
+                party & _last . pMoves . ix 2 .~ (movesByName Map.! "Barrier")
             -- Champion
             0x3A491 ->
                 party
-                    & ix 0 . moves . ix 2 .~ (movesByName Map.! "Sky Attack")
-                    & ix 5 . moves . ix 2 .~ (movesByName Map.! "Blizzard")
+                    & ix 0 . pMoves . ix 2 .~ (movesByName Map.! "Sky Attack")
+                    & ix 5 . pMoves . ix 2 .~ (movesByName Map.! "Blizzard")
             0x3A49F ->
                 party
-                    & ix 0 . moves . ix 2 .~ (movesByName Map.! "Sky Attack")
-                    & ix 5 . moves . ix 2 .~ (movesByName Map.! "Mega Drain")
+                    & ix 0 . pMoves . ix 2 .~ (movesByName Map.! "Sky Attack")
+                    & ix 5 . pMoves . ix 2 .~ (movesByName Map.! "Mega Drain")
             0x3A4AD ->
                 party
-                    & ix 0 . moves . ix 2 .~ (movesByName Map.! "Sky Attack")
-                    & ix 5 . moves . ix 2 .~ (movesByName Map.! "Fire Blast")
+                    & ix 0 . pMoves . ix 2 .~ (movesByName Map.! "Sky Attack")
+                    & ix 5 . pMoves . ix 2 .~ (movesByName Map.! "Fire Blast")
             _ -> party
 
 trainer :: Integer -> TrainerClass -> [(Integer, String)] -> Trainer

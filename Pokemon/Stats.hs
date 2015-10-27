@@ -67,6 +67,48 @@ data Stats =
 
 makeLenses ''Stats
 
+data Badges =
+    Badges
+        { _boulderBadge :: Bool
+        , _thunderBadge :: Bool
+        , _soulBadge :: Bool
+        , _volcanoBadge :: Bool
+        }
+    deriving (Eq, Show, Ord)
+
+makeLenses ''Badges
+
+noBadges :: Badges
+noBadges =
+    Badges
+        { _boulderBadge = False
+        , _thunderBadge = False
+        , _soulBadge = False
+        , _volcanoBadge = False
+        }
+
+applyBadgeBoosts :: Badges -> Stats -> Stats
+applyBadgeBoosts badges stats =
+    Stats
+        { _hpStat = stats^.hpStat
+        , _atkStat =
+            if badges^.boulderBadge
+            then stats^.atkStat * 9 `div` 8
+            else stats^.atkStat
+        , _defStat =
+            if badges^.thunderBadge
+            then stats^.defStat * 9 `div` 8
+            else stats^.defStat
+        , _spdStat =
+            if badges^.soulBadge
+            then stats^.spdStat * 9 `div` 8
+            else stats^.spdStat
+        , _spcStat =
+            if badges^.volcanoBadge
+            then stats^.spcStat * 9 `div` 8
+            else stats^.spcStat
+        }
+
 computeHP :: Integer -> Integer -> Integer -> Integer -> Integer
 computeHP base level dv statExp =
     (((base + dv) * 2 + (ceiling (sqrt (fromInteger statExp)) `div` 4)) * level) `div` 100 + level + 10

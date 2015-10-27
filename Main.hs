@@ -5,6 +5,7 @@ import Control.Monad
 import Data.Foldable
 
 import qualified Data.Map as Map
+import Pokemon.Party
 import Pokemon.Route
 import Pokemon.Species
 import Pokemon.Stats
@@ -41,6 +42,7 @@ route = do
         party . each %= defeatPokemon' (enemy^.tpSpecies) (enemy^.tpLevel) True 2
         preuse (party . _head) >>= maybe (return ()) printRanges'
 
+    badges . boulderBadge .= True
     learnMove "Horn Attack"
 
     -- Route 3
@@ -85,7 +87,7 @@ route = do
 
     -- Cerulean Gym
     defeatTrainer 0x39E9D
-    defeatTrainer 0x3A3BB
+    defeatTrainerWithRanges 0x3A3BB
 
     -- Route 6
     defeatTrainer 0x3A2AC
@@ -99,6 +101,7 @@ route = do
 
     -- Vermillion Gym
     defeatTrainer 0x3A3C1
+    badges . thunderBadge .= True
 
     learnMove "Thunderbolt"
     unlearnMove "Horn Attack"
@@ -148,6 +151,7 @@ route = do
     party . _head %= rarecandy
     defeatTrainer 0x3A140
     defeatTrainer 0x3A3D1
+    badges . soulBadge .= True
     party . _head %= rarecandy
     party . _head %= rarecandy
 
@@ -160,6 +164,7 @@ route = do
 
     -- Cinnabar Gym
     defeatTrainer 0x3A3DB
+    badges . volcanoBadge .= True
 
     -- Saffron Gym
     defeatTrainer 0x3A3E5

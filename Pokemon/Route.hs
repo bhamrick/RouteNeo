@@ -14,54 +14,27 @@ import Text.Printf
 import Pokemon.Battle
 import Pokemon.Experience
 import Pokemon.Moves
+import Pokemon.Party
 import Pokemon.Species
 import Pokemon.Stats
 import Pokemon.Trainer
 import Pokemon.Type
 
-data PartyPokemon =
-    PartyPokemon
-        { _pSpecies :: Species
-        , _pExperience :: Integer
-        , _pLevel :: Integer
-        , _pDVs :: DVs
-        , _pStatExp :: StatExp
-        , _pStatExpAtLevel :: StatExp
-        , _pStats :: Stats
-        , _pMoves :: [Move]
-        , _pCurHP :: Integer
-        }
-    deriving (Eq, Show, Ord)
-
-makeLenses ''PartyPokemon
-
-partyPokemon :: Species -> Integer -> DVs -> PartyPokemon
-partyPokemon s lvl dvs =
-    let
-    initialStats = computeStats s lvl dvs zeroStatExp
-    in
-    PartyPokemon
-        { _pSpecies = s
-        , _pExperience = lowestExpForLevel (s^.expCurve) lvl
-        , _pLevel = lvl
-        , _pDVs = dvs
-        , _pStatExp = zeroStatExp
-        , _pStatExpAtLevel = zeroStatExp
-        , _pStats = initialStats
-        , _pMoves = []
-        , _pCurHP = initialStats^.hpStat
-        }
-
 data RouteState =
     RouteState
         { _party :: [PartyPokemon]
+        , _badges :: Badges
         }
     deriving (Eq, Show, Ord)
 
 makeLenses ''RouteState
 
 emptyParty :: RouteState
-emptyParty = RouteState { _party = [] }
+emptyParty =
+    RouteState
+        { _party = []
+        , _badges = noBadges
+        }
 
 newtype RouteT m a = RouteT { unRouteT :: StateT RouteState (ExceptT String m) a }
 
@@ -96,44 +69,14 @@ class (MonadError String m, MonadState RouteState m) => MonadRoute m
 
 instance Monad m => MonadRoute (RouteT m)
 
-updateStats :: PartyPokemon -> PartyPokemon
-updateStats poke =
-    poke & pStats .~ computeStats (poke^.pSpecies) (poke^.pLevel) (poke^.pDVs) (poke^.pStatExpAtLevel)
-
-checkLevelUp :: PartyPokemon -> PartyPokemon
-checkLevelUp poke
-    | poke^.pLevel == 100 = poke
-    | poke^.pLevel > 100 = updateStats (poke & pLevel .~ 100 & pStatExpAtLevel .~ poke^.pStatExp)
-    | otherwise =
-        let
-        nextLevelExp = lowestExpForLevel (poke^.pSpecies.expCurve) (poke^.pLevel+1)
-        in
-        if poke^.pExperience >= nextLevelExp
-        then checkLevelUp (updateStats (poke & pLevel +~ 1 & pStatExpAtLevel .~ poke^.pStatExp))
-        else poke
-
 defeatPokemon :: MonadRoute m => Species -> Integer -> Bool -> Integer -> m ()
 defeatPokemon enemySpecies enemyLevel isTrainer participants = party._head %= defeatPokemon' enemySpecies enemyLevel isTrainer participants
-
-defeatPokemon' :: Species -> Integer -> Bool -> Integer -> PartyPokemon -> PartyPokemon
-defeatPokemon' enemySpecies enemyLevel isTrainer participants poke =
-    let
-    expGain = ((enemySpecies^.killExp `div` participants) * enemyLevel `div` 7) * 3 `div` (if isTrainer then 2 else 3)
-    in
-    poke
-        & pExperience +~ expGain
-        & pStatExp.hpStatExp +~ enemySpecies^.baseHP
-        & pStatExp.atkStatExp +~ enemySpecies^.baseAtk
-        & pStatExp.defStatExp +~ enemySpecies^.baseDef
-        & pStatExp.spdStatExp +~ enemySpecies^.baseSpd
-        & pStatExp.spcStatExp +~ enemySpecies^.baseSpc
-        & checkLevelUp
 
 defeatTrainer :: MonadRoute m => Integer -> m ()
 defeatTrainer offset = 
     do
         case Map.lookup offset trainersByOffset of
-            Nothing -> throwError ("Could not find trainer offset " ++ (show offset))
+            Nothing -> throwError (printf "Could not find trainer offset 0x%X" offset)
             Just t ->
                 for_ (t^.tParty) $ \enemy ->
                     party._head %= defeatPokemon' (enemy^.tpSpecies) (enemy^.tpLevel) True 1
@@ -143,21 +86,6 @@ evolveTo sName =
     case Map.lookup sName speciesByName of
         Nothing -> throwError ("Could not find species " ++ sName)
         Just s -> party . _head %= evolveTo' s
-
-evolveTo' :: Species -> PartyPokemon -> PartyPokemon
-evolveTo' s poke =
-    poke
-        & pSpecies .~ s
-        & pStatExpAtLevel .~ (poke^.pStatExp)
-        & updateStats
-
-rarecandy :: PartyPokemon -> PartyPokemon
-rarecandy poke
-    | poke^.pLevel == 100 = poke
-    | otherwise =
-        poke
-            & pExperience .~ lowestExpForLevel (poke^.pSpecies.expCurve) (poke^.pLevel + 1)
-            & checkLevelUp
 
 printStats :: (MonadIO m, MonadRoute m) => m ()
 printStats = preuse (party . _head) >>= maybe (return ()) printStats'
@@ -216,3 +144,54 @@ unlearnMove name =
 
 unlearnMove' :: Move -> PartyPokemon -> PartyPokemon
 unlearnMove' m = pMoves %~ filter (/= m)
+
+trainerBattleState :: MonadRoute m => Integer -> m BattleState
+trainerBattleState offset =
+    case Map.lookup offset trainersByOffset of
+        Nothing -> throwError (printf "Could not find trainer offset 0x%X" offset)
+        Just t ->
+            case trainerBattleParty t of
+                [] -> throwError (printf "Trainer offset 0x%X has an empty party" offset)
+                eLead:eRest -> do
+                    pParty <- use party
+                    curBadges <- use badges
+                    case pParty of
+                        [] -> throwError "Player has an empty party"
+                        pLead:pRest ->
+                            return $
+                                BattleState
+                                    { _playerActive =
+                                        FromParty
+                                            { _fpIndex = 0
+                                            , _fpData = participant curBadges pLead
+                                            }
+                                    , _playerBench =
+                                        zipWith (\i d ->
+                                            FromParty
+                                                { _fpIndex = i
+                                                , _fpData = d
+                                                }
+                                        ) [1..] pRest
+                                    , _enemyActive =
+                                        FromParty
+                                            { _fpIndex = 0
+                                            , _fpData = participant noBadges eLead
+                                            }
+                                    , _enemyBench =
+                                        zipWith (\i d ->
+                                            FromParty
+                                                { _fpIndex = i
+                                                , _fpData = d
+                                                }
+                                        ) [1..] eRest
+                                    , _playerBadges = curBadges
+                                    }
+
+defeatTrainerWithRanges :: (MonadRoute m, MonadIO m) => Integer -> m ()
+defeatTrainerWithRanges offset =
+    do
+        initialState <- trainerBattleState offset
+        result <- liftIO $ runBattleT defeatBattleWithRanges initialState
+        case result of
+            Left e -> throwError e
+            Right (_, endState) -> party .= partyAfterBattle endState
