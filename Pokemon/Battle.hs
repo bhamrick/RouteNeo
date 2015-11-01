@@ -23,6 +23,7 @@ data Participant =
     Participant
         { _partyData :: PartyPokemon
         , _battleStats :: Stats
+        , _turnsInBattle :: Integer
         }
     deriving (Eq, Show, Ord)
 
@@ -53,7 +54,7 @@ damage attacker defender move crit roll =
         effectiveness (move^.moveType) (defender^.partyData.pSpecies.type1) <>
         fromMaybe mempty (effectiveness (move^.moveType) <$> (defender^.partyData.pSpecies.type2))
     in
-    floor (fromInteger (floor (fromInteger ((floor (fromInteger (attacker^.partyData.pLevel) * (2/5) * (if crit then 2 else 1) + 2) * attack * (move^.power) `div` 50 `div` defense) + 2) * (if stab then 3/2 else 1))) * attackRatio effective) * roll `div` 255
+    floor (fromInteger (floor (fromInteger ((floor (fromInteger (attacker^.partyData.pLevel) * (2/5) * (if crit then 2 else 1) + 2) * attack * (move^.power) `div` defense `div` 50) + 2) * (if stab then 3/2 else 1))) * attackRatio effective) * roll `div` 255
 
 -- TODO: Stage modifiers
 recomputeStats :: Badges -> Participant -> Participant
@@ -129,7 +130,16 @@ printDamages attacker defender =
                 minCrit = damage attacker defender m True minRange
                 maxCrit = damage attacker defender m True maxRange
             in
-            printf "%-15s\t%d-%d\t(crit: %d-%d)\n" (m^.moveName) minDamage maxDamage minCrit maxCrit
+            printf "%-15s\t%d-%d\t%.2f%%-%.2f%%\t(crit: %d-%d\t%.2f%%-%.2f%%)\n"
+                (m^.moveName)
+                minDamage
+                maxDamage
+                (fromInteger minDamage * 100 / fromInteger (defender^.battleStats.hpStat) :: Double)
+                (fromInteger maxDamage * 100 / fromInteger (defender^.battleStats.hpStat) :: Double)
+                minCrit
+                maxCrit
+                (fromInteger minCrit * 100 / fromInteger (defender^.battleStats.hpStat) :: Double)
+                (fromInteger maxCrit * 100 / fromInteger (defender^.battleStats.hpStat) :: Double)
         printf "\n"
 
 defeatEnemyPokemon :: MonadBattle m => m ()
@@ -168,6 +178,7 @@ participant bs p =
     Participant
         { _partyData = p
         , _battleStats = p^.pStats
+        , _turnsInBattle = 0
         }
     & recomputeStats bs
 

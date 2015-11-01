@@ -6,6 +6,7 @@ import Pokemon.Experience
 import Pokemon.Moves
 import Pokemon.Species
 import Pokemon.Stats
+import Pokemon.Status
 
 data PartyPokemon =
     PartyPokemon
@@ -18,6 +19,7 @@ data PartyPokemon =
         , _pStats :: Stats
         , _pMoves :: [Move]
         , _pCurHP :: Integer
+        , _pStatus :: Status
         }
     deriving (Eq, Show, Ord)
 
@@ -38,6 +40,7 @@ partyPokemon s lvl dvs =
         , _pStats = initialStats
         , _pMoves = []
         , _pCurHP = initialStats^.hpStat
+        , _pStatus = Healthy
         }
 
 updateStats :: PartyPokemon -> PartyPokemon

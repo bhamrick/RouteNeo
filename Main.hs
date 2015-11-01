@@ -15,7 +15,7 @@ route :: RouteT IO ()
 route = do
     let 
         nidoDVs = DVs
-            { _atkDV = 12
+            { _atkDV = 13
             , _defDV = 12
             , _spdDV = 12
             , _spcDV = 12
@@ -128,9 +128,9 @@ route = do
 
     -- Lavender Tower
     defeatTrainer 0x3A42B
-    defeatTrainer 0x3A4E3
-    defeatTrainer 0x3A507
-    defeatTrainer 0x3A504
+    defeatTrainerWithRanges 0x3A4E3
+    defeatTrainerWithRanges 0x3A507
+    defeatTrainerWithRanges 0x3A504
 
     defeatTrainer 0x3A2ED
     defeatTrainer 0x3A2F2

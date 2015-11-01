@@ -190,6 +190,10 @@ trainerBattleState offset =
 defeatTrainerWithRanges :: (MonadRoute m, MonadIO m) => Integer -> m ()
 defeatTrainerWithRanges offset =
     do
+        case Map.lookup offset trainersByOffset of
+            Nothing -> throwError (printf "Could not find trainer offset 0x%X" offset)
+            Just t ->
+                liftIO $ printf "%s (0x%X)\n" (show (t^.tClass)) (t^.tOffset)
         initialState <- trainerBattleState offset
         result <- liftIO $ runBattleT defeatBattleWithRanges initialState
         case result of

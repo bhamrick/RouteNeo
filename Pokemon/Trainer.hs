@@ -13,6 +13,7 @@ import Pokemon.Moves
 import Pokemon.Party
 import Pokemon.Species
 import Pokemon.Stats
+import Pokemon.Status
 
 data TrainerClass
     = Youngster
@@ -106,6 +107,7 @@ trainerBattleParty t =
                 , _pStats = stats
                 , _pMoves = defaultMoves (tp^.tpSpecies) (tp^.tpLevel)
                 , _pCurHP = stats^.hpStat
+                , _pStatus = Healthy
                 }
         )
         & moveOverride

@@ -7,19 +7,6 @@ import qualified Data.Map as Map
 
 import Pokemon.Type
 
-data Move =
-    Move
-        { _moveName :: String
-        , _moveType :: Type
-        , _pp :: Integer
-        , _power :: Integer
-        , _accuracy :: Integer
-        -- TODO: Effect
-        }
-    deriving (Eq, Show, Ord)
-
-makeLenses ''Move
-
 data MoveEffect
     = NoEffect
     | PoisonSideEffect1
@@ -102,6 +89,19 @@ data MoveEffect
     | DisableEffect
     deriving (Eq, Show, Ord)
 
+data Move =
+    Move
+        { _moveName :: String
+        , _moveType :: Type
+        , _pp :: Integer
+        , _power :: Integer
+        , _accuracy :: Integer
+        , _effect :: MoveEffect
+        }
+    deriving (Eq, Show, Ord)
+
+makeLenses ''Move
+
 move :: String -> MoveEffect -> Integer -> Type -> Integer -> Integer -> Move
 move name effect power ty acc_pct pp =
     Move
@@ -110,6 +110,7 @@ move name effect power ty acc_pct pp =
         , _pp = pp
         , _power = power
         , _accuracy = acc_pct * 0xFF `div` 100
+        , _effect = effect
         }
 
 movesByName :: Map String Move
