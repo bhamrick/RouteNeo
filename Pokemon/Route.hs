@@ -7,11 +7,13 @@ module Pokemon.Route where
 import Control.Lens
 import Control.Monad.Except
 import Control.Monad.State
+import Control.Monad.Random
 import Data.Foldable
 import qualified Data.Map as Map
 import Text.Printf
 
 import Pokemon.Battle
+import Pokemon.EnemyAI
 import Pokemon.Experience
 import Pokemon.Moves
 import Pokemon.Party
@@ -65,6 +67,12 @@ instance Monad m => MonadState RouteState (RouteT m) where
 instance MonadIO m => MonadIO (RouteT m) where
     liftIO = RouteT . liftIO
 
+instance MonadRandom m => MonadRandom (RouteT m) where
+    getRandom = RouteT getRandom
+    getRandoms = RouteT getRandoms
+    getRandomR = RouteT . getRandomR
+    getRandomRs = RouteT . getRandomRs
+
 class (MonadError String m, MonadState RouteState m) => MonadRoute m
 
 instance Monad m => MonadRoute (RouteT m)
@@ -72,14 +80,17 @@ instance Monad m => MonadRoute (RouteT m)
 defeatPokemon :: MonadRoute m => Species -> Integer -> Bool -> Integer -> m ()
 defeatPokemon enemySpecies enemyLevel isTrainer participants = party._head %= defeatPokemon' enemySpecies enemyLevel isTrainer participants
 
-defeatTrainer :: MonadRoute m => Integer -> m ()
-defeatTrainer offset = 
+runTrainer :: (MonadRoute m, MonadIO m) => Integer -> BattleT IO a -> m ()
+runTrainer offset battle =
     do
-        case Map.lookup offset trainersByOffset of
-            Nothing -> throwError (printf "Could not find trainer offset 0x%X" offset)
-            Just t ->
-                for_ (t^.tParty) $ \enemy ->
-                    party._head %= defeatPokemon' (enemy^.tpSpecies) (enemy^.tpLevel) True 1
+        initialState <- trainerBattleState offset
+        result <- liftIO $ runBattleT battle initialState
+        case result of
+            Left e -> throwError e
+            Right (_, endState) -> party .= partyAfterBattle endState
+
+defeatTrainer :: (MonadRoute m, MonadIO m) => Integer -> m ()
+defeatTrainer offset = runTrainer offset defeatBattle
 
 evolveTo :: MonadRoute m => String -> m ()
 evolveTo sName =
@@ -194,8 +205,19 @@ defeatTrainerWithRanges offset =
             Nothing -> throwError (printf "Could not find trainer offset 0x%X" offset)
             Just t ->
                 liftIO $ printf "%s (0x%X)\n" (show (t^.tClass)) (t^.tOffset)
-        initialState <- trainerBattleState offset
-        result <- liftIO $ runBattleT defeatBattleWithRanges initialState
-        case result of
-            Left e -> throwError e
-            Right (_, endState) -> party .= partyAfterBattle endState
+        runTrainer offset defeatBattleWithRanges
+
+simulateTrainerBattle :: (MonadRoute m, MonadRandom m) => Integer -> BattleT m PlayerBattleAction -> m (BattleResult, BattleState)
+simulateTrainerBattle offset playerStrategy =
+    do
+        case Map.lookup offset trainersByOffset of
+            Nothing -> throwError (printf "Could not find trainer offset 0x%X" offset)
+            Just t -> do
+                initialState <- trainerBattleState offset
+                let enemyStrategy = trainerStrategy (t^.tClass)
+                -- TODO: Implement these
+                let enemySpecialAI = noSpecialAI
+                result <- runBattleT (simulateBattle playerStrategy enemyStrategy enemySpecialAI) initialState
+                case result of
+                    Left e -> throwError e
+                    Right r -> pure r

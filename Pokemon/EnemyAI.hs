@@ -1,10 +1,12 @@
 module Pokemon.EnemyAI where
 
 import Control.Lens
+import Control.Monad.Random
 import Data.List
 import Data.Maybe
 import Data.Monoid
 import Data.Traversable
+import Data.Tuple
 
 import Pokemon.Battle
 import Pokemon.Moves
@@ -14,6 +16,7 @@ import Pokemon.Status
 import Pokemon.Trainer
 import Pokemon.Type
 
+-- TODO: Disabled move
 enemyMoveDistribution :: (MonadBattle m, Num a) => [Move -> m Integer] -> m [(a, Move)]
 enemyMoveDistribution mods =
     do
@@ -24,6 +27,12 @@ enemyMoveDistribution mods =
                 pure (sum modResults)
         let normalizedPriorities = map (subtract (minimum priorities)) priorities
         pure $ map snd . filter ((== 0) . fst) . zip normalizedPriorities . zip [63, 64, 63, 66] $ moveChoices
+
+trainerStrategy :: (MonadBattle m, MonadRandom m) => TrainerClass -> m Move
+trainerStrategy c = do
+    let mods = trainerAIMods c
+    dist <- enemyMoveDistribution mods
+    fromList (map swap dist)
 
 trainerAIModification1 :: MonadBattle m => Move -> m Integer
 trainerAIModification1 m =
@@ -244,3 +253,7 @@ trainerAIMods c =
         Channeler -> [trainerAIModification1]
         Agatha -> [trainerAIModification1]
         Lance -> [trainerAIModification1, trainerAIModification3]
+
+-- TODO: Implement special AIs
+noSpecialAI :: (MonadBattle m, MonadRandom m) => m Bool
+noSpecialAI = pure False

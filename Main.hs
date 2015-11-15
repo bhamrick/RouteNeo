@@ -2,9 +2,12 @@ module Main where
 
 import Control.Lens
 import Control.Monad
+import Control.Monad.IO.Class
 import Data.Foldable
 
 import qualified Data.Map as Map
+import Pokemon.Battle
+import Pokemon.Moves
 import Pokemon.Party
 import Pokemon.Route
 import Pokemon.Species
@@ -15,7 +18,7 @@ route :: RouteT IO ()
 route = do
     let 
         nidoDVs = DVs
-            { _atkDV = 13
+            { _atkDV = 12
             , _defDV = 12
             , _spdDV = 12
             , _spcDV = 12
@@ -26,6 +29,13 @@ route = do
             , _spdDV = 12
             , _spcDV = 12
             }
+
+    party .=
+        [ partyPokemon (speciesByName Map.! "Squirtle") 5 squirtleDVs ]
+    replicateM 100 $ do
+        (result, endState) <- simulateTrainerBattle 0x3A1E7 (pure $ PUseMove (movesByName Map.! "Tackle"))
+        liftIO $ print (result, endState^.playerActive.fpData.partyData.pCurHP)
+
     party .=
         [ partyPokemon (speciesByName Map.! "NidoranM") 3 nidoDVs
         , partyPokemon (speciesByName Map.! "Squirtle") 8 squirtleDVs
@@ -34,13 +44,10 @@ route = do
     learnMove "Leer"
     learnMove "Tackle"
 
-    printStats
-    printRanges
-
     -- Defeat Brock
     for_ ((trainersByOffset Map.! 0x3A3B5) ^. tParty) $ \enemy -> do
         party . each %= defeatPokemon' (enemy^.tpSpecies) (enemy^.tpLevel) True 2
-        preuse (party . _head) >>= maybe (return ()) printRanges'
+        -- preuse (party . _head) >>= maybe (return ()) printRanges'
 
     badges . boulderBadge .= True
     learnMove "Horn Attack"
@@ -128,9 +135,9 @@ route = do
 
     -- Lavender Tower
     defeatTrainer 0x3A42B
-    defeatTrainerWithRanges 0x3A4E3
-    defeatTrainerWithRanges 0x3A507
-    defeatTrainerWithRanges 0x3A504
+    defeatTrainer 0x3A4E3
+    defeatTrainer 0x3A507
+    defeatTrainer 0x3A504
 
     defeatTrainer 0x3A2ED
     defeatTrainer 0x3A2F2
@@ -141,6 +148,9 @@ route = do
 
     -- Silph
     defeatTrainer 0x3A34B
+    learnMove "Earthquake"
+    unlearnMove "Thrash"
+
     defeatTrainer 0x3A319
     defeatTrainer 0x3A44F
     defeatTrainer 0x3A355
@@ -183,9 +193,6 @@ route = do
     defeatTrainer 0x3A516
     defeatTrainer 0x3A522
     defeatTrainer 0x3A49F
-
-    printStats
-    printRanges
 
 main :: IO ()
 main = void $ runRouteT route emptyParty
