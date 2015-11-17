@@ -2,11 +2,13 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Pokemon.Battle where
 
 import Control.Lens
 import Control.Monad.Except
 import Control.Monad.State
+import Control.Monad.Trans.Maybe
 import Control.Monad.Random
 import Data.Foldable
 import Data.List
@@ -70,6 +72,8 @@ data Participant =
         { _partyData :: PartyPokemon
         , _battleStats :: Stats
         , _battleStatMods :: StatMods
+        , _ownerBadges :: Badges
+        , _isEnemy :: Bool
         , _turnsInBattle :: Integer
         }
     deriving (Eq, Show, Ord)
@@ -119,13 +123,19 @@ applyStatMods mods stats =
         , _spcStat = floor (fromInteger (stats^.spcStat) * statModRatio (mods^.spcMod))
         }
 
+clamp :: Ord a => a -> a -> a -> a
+clamp lo hi x
+    | x <= lo = lo
+    | x >= hi = hi
+    | otherwise = x
+
 -- TODO: Burn/Paralysis modifiers
-recomputeStats :: Badges -> Participant -> Participant
-recomputeStats b p =
+recomputeStats :: Participant -> Participant
+recomputeStats p =
     let
     newStats =
         p^.partyData.pStats
-        & applyBadgeBoosts b
+        & applyBadgeBoosts (p^.ownerBadges)
         & applyStatMods (p^.battleStatMods)
     in
     p & battleStats .~ newStats
@@ -146,6 +156,7 @@ data BattleState =
         , _playerBench :: [FromParty PartyPokemon]
         , _enemyBench :: [FromParty PartyPokemon]
         , _playerBadges :: Badges
+        , _turnCount :: Integer
         }
     deriving (Eq, Show, Ord)
 
@@ -188,7 +199,9 @@ instance MonadRandom m => MonadRandom (BattleT m) where
 
 class (MonadError String m, MonadState BattleState m) => MonadBattle m
 
-instance Monad m => MonadBattle (BattleT m)
+instance (MonadError String m, MonadState BattleState m) => MonadBattle m
+
+-- instance Monad m => MonadBattle (BattleT m)
 
 printDamages :: MonadIO m => Participant -> Participant -> m ()
 printDamages attacker defender =
@@ -220,8 +233,7 @@ defeatEnemyPokemon = do
     enemyActive.fpData.partyData.pCurHP .= 0
     newLevel <- use (playerActive.fpData.partyData.pLevel)
     when (newLevel > oldLevel) $ do
-        bs <- use playerBadges
-        playerActive.fpData %= recomputeStats bs
+        playerActive.fpData %= recomputeStats
 
 data BattleResult = Victory | Defeat
     deriving (Eq, Show, Ord)
@@ -243,15 +255,17 @@ checkEndOfBattle =
 partyAfterBattle :: BattleState -> [PartyPokemon]
 partyAfterBattle s = map (view fpData) . sortOn (view fpIndex) $ (s^.playerActive & fpData %~ view partyData) : (s^.playerBench)
 
-participant :: Badges -> PartyPokemon -> Participant
-participant bs p =
+participant :: Bool -> Badges -> PartyPokemon -> Participant
+participant enemy bs p =
     Participant
         { _partyData = p
         , _battleStats = p^.pStats
         , _turnsInBattle = 0
+        , _ownerBadges = bs
+        , _isEnemy = enemy
         , _battleStatMods = defaultStatMods
         }
-    & recomputeStats bs
+    & recomputeStats
 
 playerSwitchTo :: MonadBattle m => Integer -> m ()
 playerSwitchTo ind = do
@@ -261,7 +275,7 @@ playerSwitchTo ind = do
     case match of
         Nothing -> throwError $ printf "Cannot switch player to party position %d." ind
         Just poke -> do
-            playerActive .= (poke & fpData %~ participant bs)
+            playerActive .= (poke & fpData %~ participant False bs)
             playerBench %= filter (/= poke)
             playerBench %= (:) (active & fpData %~ view partyData)
 
@@ -272,7 +286,7 @@ enemySwitchTo ind = do
     case match of
         Nothing -> throwError $ printf "Cannot switch enemy to party position %d." ind
         Just poke -> do
-            enemyActive .= (poke & fpData %~ participant noBadges)
+            enemyActive .= (poke & fpData %~ participant True noBadges)
             enemyBench %= filter (/= poke)
             enemyBench %= (:) (active & fpData %~ view partyData)
 
@@ -337,20 +351,44 @@ defeatBattleWithRanges = do
 -- TODO: Complete accuracy check (XAcc, etc)
 -- TODO: Account for high crit moves
 useMove :: (MonadBattle m, MonadRandom m) => ALens' BattleState (FromParty Participant) -> ALens' BattleState (FromParty Participant) -> Move -> m ()
-useMove attackerL defenderL m = do
-    moveHits <- do
-        accByte <- getRandomR (0, 255)
-        pure (accByte < m^.accuracy)
-    damageRoll <- getRandomR (minRange, maxRange)
-    attacker <- use (cloneLens attackerL . fpData)
-    defender <- use (cloneLens defenderL . fpData)
-    isCrit <- do
-        attackerBaseSpd <- use (cloneLens attackerL . fpData . partyData . pSpecies . baseSpd)
-        critByte <- getRandomR (0, 255)
-        pure (critByte < attackerBaseSpd `div` 2)
-    let damageDone = damage attacker defender m isCrit damageRoll
-    cloneLens defenderL . fpData . partyData . pCurHP %= max 0 . subtract damageDone
-    pure ()
+useMove attackerL defenderL m =
+    fmap (fromMaybe ()) . runMaybeT $ do
+        moveHits <- do
+            accByte <- getRandomR (0, 255)
+            pure (accByte < m^.accuracy)
+        when (not moveHits) abort
+        damageRoll <- getRandomR (minRange, maxRange)
+        attacker <- use (cloneLens attackerL . fpData)
+        defender <- use (cloneLens defenderL . fpData)
+        isCrit <- do
+            attackerBaseSpd <- use (cloneLens attackerL . fpData . partyData . pSpecies . baseSpd)
+            critByte <- getRandomR (0, 255)
+            pure (critByte < attackerBaseSpd `div` 2)
+        let damageDone = damage attacker defender m isCrit damageRoll
+        cloneLens defenderL . fpData . partyData . pCurHP %= max 0 . subtract damageDone
+        executeMoveEffect attackerL defenderL (m^.effect)
+        pure ()
+
+abort :: Applicative m => MaybeT m b
+abort = MaybeT (pure Nothing)
+
+statModifierDownEffect :: (MonadBattle m, MonadRandom m) => ALens' StatMods Integer -> ALens' Stats Integer -> Integer -> ALens' BattleState (FromParty Participant) -> m ()
+statModifierDownEffect modL statL modDelta targetL =
+    fmap (fromMaybe ()) . runMaybeT $ do
+        target <- use (cloneLens targetL . fpData)
+        when (not $ target^.isEnemy) $ do
+            missByte <- getRandomR (0, 0xFF)
+            when (missByte < (0x40 :: Integer)) abort
+        modifyStat modL statL (-modDelta) targetL
+
+executeMoveEffect :: (MonadBattle m, MonadRandom m) => ALens' BattleState (FromParty Participant) -> ALens' BattleState (FromParty Participant) -> MoveEffect -> m ()
+executeMoveEffect attackerL defenderL effect =
+    case effect of
+        AttackDown1Effect -> statModifierDownEffect atkMod atkStat 1 defenderL
+        DefenseDown1Effect -> statModifierDownEffect defMod defStat 1 defenderL
+        SpeedDown1Effect -> statModifierDownEffect spdMod spdStat 1 defenderL
+        SpecialDown1Effect -> statModifierDownEffect spcMod spcStat 1 defenderL
+        _ -> pure ()
 
 -- TODO: Account for using items on non-lead pokemon.
 useItem :: (MonadBattle m, MonadRandom m) => ALens' BattleState (FromParty Participant) -> Item -> m ()
@@ -399,6 +437,9 @@ runTurn playerStrategy enemyStrategy enemySpecialAI = do
             enemyMove <- enemyStrategy
             usedSpecialAI <- enemySpecialAI
             when (not usedSpecialAI) $ useMove enemyActive playerActive enemyMove
+    playerActive.fpData.turnsInBattle += 1
+    enemyActive.fpData.turnsInBattle += 1
+    turnCount += 1
 
 simulateBattle :: (MonadBattle m, MonadRandom m) => m PlayerBattleAction -> m Move -> m Bool -> m BattleResult
 simulateBattle playerStrategy enemyStrategy enemySpecialAI = do
@@ -411,9 +452,7 @@ simulateBattle playerStrategy enemyStrategy enemySpecialAI = do
         oldLevel <- use (playerActive.fpData.partyData.pLevel)
         playerActive.fpData.partyData %= defeatPokemon' (enemyPokemon^.pSpecies) (enemyPokemon^.pLevel) True 1
         newLevel <- use (playerActive.fpData.partyData.pLevel)
-        when (newLevel > oldLevel) $ do
-            bs <- use playerBadges
-            playerActive.fpData %= recomputeStats bs
+        when (newLevel > oldLevel) $ playerActive.fpData %= recomputeStats
 
     result <- checkEndOfBattle
     case result of
@@ -425,3 +464,29 @@ simulateBattle playerStrategy enemyStrategy enemySpecialAI = do
                 playerDefaultSwitch
             simulateBattle playerStrategy enemyStrategy enemySpecialAI
         Just r -> pure r
+
+-- TODO: Apply Burn/Paralysis modifiers
+modifyStat :: MonadBattle m => ALens' StatMods Integer -> ALens' Stats Integer -> Integer -> ALens' BattleState (FromParty Participant) -> m ()
+modifyStat statModL statL modDelta targetL = do
+    newMod <- cloneLens targetL . fpData . battleStatMods . cloneLens statModL <%= clamp (-6) 6 . (+) modDelta
+    partyStat <- use (cloneLens targetL . fpData . partyData . pStats . cloneLens statL)
+    cloneLens targetL . fpData . battleStats . cloneLens statL .= floor (fromInteger partyStat * statModRatio newMod)
+    bs <- use (cloneLens targetL . fpData . ownerBadges)
+    cloneLens targetL . fpData . battleStats %= applyBadgeBoosts bs
+
+modifyAtk :: MonadBattle m => Integer -> ALens' BattleState (FromParty Participant) -> m ()
+modifyAtk = modifyStat atkMod atkStat
+
+modifyDef :: MonadBattle m => Integer -> ALens' BattleState (FromParty Participant) -> m ()
+modifyDef = modifyStat defMod defStat
+
+modifySpd :: MonadBattle m => Integer -> ALens' BattleState (FromParty Participant) -> m ()
+modifySpd = modifyStat spdMod spdStat
+
+modifySpc :: MonadBattle m => Integer -> ALens' BattleState (FromParty Participant) -> m ()
+modifySpc = modifyStat spcMod spcStat
+
+-- Used for modifying accuracy/evasion stat mods
+modifyMod :: MonadBattle m => ALens' StatMods Integer -> Integer -> ALens' BattleState (FromParty Participant) -> m ()
+modifyMod modL modDelta targetL = do
+    cloneLens targetL . fpData . battleStatMods . cloneLens modL %= clamp (-6) 6 . (+) modDelta

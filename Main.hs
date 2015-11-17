@@ -32,9 +32,16 @@ route = do
 
     party .=
         [ partyPokemon (speciesByName Map.! "Squirtle") 5 squirtleDVs ]
-    replicateM 100 $ do
-        (result, endState) <- simulateTrainerBattle 0x3A1E7 (pure $ PUseMove (movesByName Map.! "Tackle"))
-        liftIO $ print (result, endState^.playerActive.fpData.partyData.pCurHP)
+    results <- replicateM 1000 $ do
+        let rivalStrat = do
+            enemyDefMod <- use (enemyActive.fpData.battleStatMods.defMod)
+            if enemyDefMod < 0
+                then pure $ PUseMove (movesByName Map.! "Tackle")
+                else pure $ PUseMove (movesByName Map.! "Tail Whip")
+        simulateTrainerBattle 0x3A1E7 rivalStrat
+
+    printTrainerInfo 0x3A1E7
+    summarizeResults results
 
     party .=
         [ partyPokemon (speciesByName Map.! "NidoranM") 3 nidoDVs

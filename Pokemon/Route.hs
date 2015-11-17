@@ -9,6 +9,7 @@ import Control.Monad.Except
 import Control.Monad.State
 import Control.Monad.Random
 import Data.Foldable
+import Data.List
 import qualified Data.Map as Map
 import Text.Printf
 
@@ -174,7 +175,7 @@ trainerBattleState offset =
                                     { _playerActive =
                                         FromParty
                                             { _fpIndex = 0
-                                            , _fpData = participant curBadges pLead
+                                            , _fpData = participant False curBadges pLead
                                             }
                                     , _playerBench =
                                         zipWith (\i d ->
@@ -186,7 +187,7 @@ trainerBattleState offset =
                                     , _enemyActive =
                                         FromParty
                                             { _fpIndex = 0
-                                            , _fpData = participant noBadges eLead
+                                            , _fpData = participant True noBadges eLead
                                             }
                                     , _enemyBench =
                                         zipWith (\i d ->
@@ -196,6 +197,7 @@ trainerBattleState offset =
                                                 }
                                         ) [1..] eRest
                                     , _playerBadges = curBadges
+                                    , _turnCount = 0
                                     }
 
 defeatTrainerWithRanges :: (MonadRoute m, MonadIO m) => Integer -> m ()
@@ -221,3 +223,22 @@ simulateTrainerBattle offset playerStrategy =
                 case result of
                     Left e -> throwError e
                     Right r -> pure r
+
+printTrainerInfo :: (MonadRoute m, MonadIO m) => Integer -> m ()
+printTrainerInfo offset =
+    do
+        case Map.lookup offset trainersByOffset of
+            Nothing -> throwError (printf "Could not find trainer offset 0x%X" offset)
+            Just t -> do
+                let descriptions = map (\tp -> printf "L%d %s" (tp^.tpLevel) (tp^.tpSpecies.name)) (t^.tParty)
+                liftIO $ printf "%s (0x%X: %s)\n" (show (t^.tClass)) (t^.tOffset) (intercalate ", " descriptions)
+summarizeResults :: MonadIO m => [(BattleResult, BattleState)] -> m ()
+summarizeResults results =
+    do
+        let winCount = length . filter (\(r, _) -> r == Victory) $ results
+            lossCount = length . filter (\(r, _) -> r == Defeat) $ results
+            turnCounts = map (\(_, s) -> s^.turnCount) results
+            victoryTurnCounts = map (\(_, s) -> s^.turnCount) . filter (\(r, _) -> r == Victory) $ results
+        liftIO $ printf "Winrate %.2f%% (%d/%d)\n" (100 * fromIntegral winCount / fromIntegral (winCount + lossCount) :: Double) winCount (winCount + lossCount)
+        liftIO $ printf "Average turns: %.2f\n" (fromIntegral (sum turnCounts) / fromIntegral (length turnCounts) :: Double)
+        liftIO $ printf "Average victory turns: %.2f\n" (fromIntegral (sum victoryTurnCounts) / fromIntegral (length victoryTurnCounts) :: Double)
