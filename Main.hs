@@ -24,7 +24,7 @@ route = do
             , _spcDV = 12
             }
         squirtleDVs = DVs
-            { _atkDV = 12
+            { _atkDV = 13
             , _defDV = 12
             , _spdDV = 12
             , _spcDV = 12
@@ -32,13 +32,17 @@ route = do
 
     party .=
         [ partyPokemon (speciesByName Map.! "Squirtle") 5 squirtleDVs ]
-    results <- replicateM 1000 $ do
-        let rivalStrat = do
+    results <- replicateM 100 $ do
+        simulateTrainerBattle 0x3A1E7 $ do
             enemyDefMod <- use (enemyActive.fpData.battleStatMods.defMod)
-            if enemyDefMod < 0
-                then pure $ PUseMove (movesByName Map.! "Tackle")
-                else pure $ PUseMove (movesByName Map.! "Tail Whip")
-        simulateTrainerBattle 0x3A1E7 rivalStrat
+            if enemyDefMod > (-1)
+                then pure $ PUseMove (movesByName Map.! "Tail Whip")
+                else do
+                    turn <- use turnCount
+                    playerAtkMod <- use (playerActive.fpData.battleStatMods.atkMod)
+                    if turn == 1 && playerAtkMod == (-1)
+                        then pure $ PUseMove (movesByName Map.! "Tail Whip")
+                        else pure $ PUseMove (movesByName Map.! "Tackle")
 
     printTrainerInfo 0x3A1E7
     summarizeResults results
@@ -101,7 +105,7 @@ route = do
 
     -- Cerulean Gym
     defeatTrainer 0x39E9D
-    defeatTrainerWithRanges 0x3A3BB
+    defeatTrainer 0x3A3BB
 
     -- Route 6
     defeatTrainer 0x3A2AC

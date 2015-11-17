@@ -232,6 +232,10 @@ printTrainerInfo offset =
             Just t -> do
                 let descriptions = map (\tp -> printf "L%d %s" (tp^.tpLevel) (tp^.tpSpecies.name)) (t^.tParty)
                 liftIO $ printf "%s (0x%X: %s)\n" (show (t^.tClass)) (t^.tOffset) (intercalate ", " descriptions)
+
+counts :: Ord a => [a] -> [(a, Integer)]
+counts = Map.toList . foldr (\k -> Map.insertWith (+) k 1) Map.empty
+
 summarizeResults :: MonadIO m => [(BattleResult, BattleState)] -> m ()
 summarizeResults results =
     do
@@ -239,6 +243,10 @@ summarizeResults results =
             lossCount = length . filter (\(r, _) -> r == Defeat) $ results
             turnCounts = map (\(_, s) -> s^.turnCount) results
             victoryTurnCounts = map (\(_, s) -> s^.turnCount) . filter (\(r, _) -> r == Victory) $ results
-        liftIO $ printf "Winrate %.2f%% (%d/%d)\n" (100 * fromIntegral winCount / fromIntegral (winCount + lossCount) :: Double) winCount (winCount + lossCount)
+            numTrials = length results
+        liftIO $ printf "Winrate %.2f%% (%d/%d)\n" (100 * fromIntegral winCount / fromIntegral numTrials :: Double) winCount numTrials
         liftIO $ printf "Average turns: %.2f\n" (fromIntegral (sum turnCounts) / fromIntegral (length turnCounts) :: Double)
         liftIO $ printf "Average victory turns: %.2f\n" (fromIntegral (sum victoryTurnCounts) / fromIntegral (length victoryTurnCounts) :: Double)
+        liftIO $ printf "Turn distribution:\n"
+        for_ (reverse . sortOn snd . counts . map (\(r, s) -> (r, s^.turnCount)) $ results) $ \((r, t), n) -> do
+            liftIO $ printf "  %d turn %s: %.2f%%\n" t (show r) (100 * fromInteger n / fromIntegral numTrials :: Double)
