@@ -4,7 +4,9 @@ RouteNeo is a successor to [RouteOne](https://github.com/hroll/poke-router)
 that is planned to support additional features like simulating battles and
 reporting the probabilities of different outcomes.
 
-Currently, RouteNeo is under active construction and is not very featureful.
+Currently, RouteNeo is under active construction.
+RouteNeo is able to generate the same damage calculations as RouteOne,
+but does not currently do inventory and money management.
 
 ## Features Present
 
@@ -16,4 +18,5 @@ Currently, RouteNeo is under active construction and is not very featureful.
 
 ## Features Planned
 
-* Simulate Trainer AI and battle state
+* Simulate Trainer AI and battle state (partially implemented)
+* Inventory management
