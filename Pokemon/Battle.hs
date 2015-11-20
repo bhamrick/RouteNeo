@@ -66,7 +66,6 @@ statModRatio l =
         6 -> 400/100
         _ -> 1
 
-
 data Participant =
     Participant
         { _partyData :: PartyPokemon
@@ -75,6 +74,9 @@ data Participant =
         , _ownerBadges :: Badges
         , _isEnemy :: Bool
         , _turnsInBattle :: Integer
+        , _usingXAccuracy :: Bool
+        , _isConfused :: Bool
+        , _confusionCounter :: Integer
         }
     deriving (Eq, Show, Ord)
 
@@ -111,7 +113,17 @@ damage attacker defender move crit roll =
         effectiveness (move^.moveType) (defender^.partyData.pSpecies.type1) <>
         fromMaybe mempty (effectiveness (move^.moveType) <$> (defender^.partyData.pSpecies.type2))
     in
-    floor (fromInteger (floor (fromInteger ((floor (fromInteger (attacker^.partyData.pLevel) * (2/5) * (if crit then 2 else 1) + 2) * attack * (move^.power) `div` defense `div` 50) + 2) * (if stab then 3/2 else 1))) * attackRatio effective) * roll `div` 255
+    if move^.effect == SpecialDamageEffect
+    then
+        case move^.moveName of
+            "Seismic Toss" -> attacker^.partyData.pLevel
+            "Night Shade" -> attacker^.partyData.pLevel
+            "Sonicboom" -> 20
+            "Dragon Rage" -> 40
+            "Psywave" -> 0 -- TODO: Will require a refactor
+            _ -> 0
+    else
+        floor (fromInteger (floor (fromInteger ((floor (fromInteger (attacker^.partyData.pLevel) * (2/5) * (if crit then 2 else 1) + 2) * attack * (move^.power) `div` defense `div` 50) + 2) * (if stab then 3/2 else 1))) * attackRatio effective) * roll `div` 255
 
 applyStatMods :: StatMods -> Stats -> Stats
 applyStatMods mods stats =
@@ -201,8 +213,6 @@ class (MonadError String m, MonadState BattleState m) => MonadBattle m
 
 instance (MonadError String m, MonadState BattleState m) => MonadBattle m
 
--- instance Monad m => MonadBattle (BattleT m)
-
 printDamages :: MonadIO m => Participant -> Participant -> m ()
 printDamages attacker defender =
     liftIO $ do
@@ -264,6 +274,9 @@ participant enemy bs p =
         , _ownerBadges = bs
         , _isEnemy = enemy
         , _battleStatMods = defaultStatMods
+        , _usingXAccuracy = False
+        , _isConfused = False
+        , _confusionCounter = 0
         }
     & recomputeStats
 
@@ -347,6 +360,36 @@ defeatBattleWithRanges = do
             defeatBattleWithRanges
         _ -> return ()
 
+earlyReturn :: Applicative m => e -> ExceptT e m a
+earlyReturn e = ExceptT (pure $ Left e)
+
+statusCheck :: (MonadBattle m, MonadRandom m) => ALens' BattleState (FromParty Participant) -> m Bool
+statusCheck attackerL = fmap (either id id) . runExceptT $ do
+    passConfused <- lift $ confusionCheck attackerL
+    when (not passConfused) $ earlyReturn False
+    pure True
+
+confusionCheck :: (MonadBattle m, MonadRandom m) => ALens' BattleState (FromParty Participant) -> m Bool
+confusionCheck attackerL = do
+    confused <- use (cloneLens attackerL . fpData . isConfused)
+    if confused
+        then do
+            turns <- cloneLens attackerL . fpData . confusionCounter <%= subtract 1
+            if turns == 0
+                then do
+                    cloneLens attackerL . fpData . isConfused .= False
+                    pure True
+                else do
+                    hitSelf <- getRandom
+                    if hitSelf
+                        then do
+                            attacker <- use (cloneLens attackerL . fpData)
+                            let dmg = damage attacker attacker hitSelfMove False maxRange
+                            cloneLens attackerL . fpData . partyData . pCurHP -= dmg
+                            pure False
+                    else pure True
+        else pure True
+
 -- TODO: Move effects
 -- TODO: Complete accuracy check (XAcc, etc)
 -- TODO: Account for high crit moves
@@ -388,11 +431,24 @@ executeMoveEffect attackerL defenderL effect =
         DefenseDown1Effect -> statModifierDownEffect defMod defStat 1 defenderL
         SpeedDown1Effect -> statModifierDownEffect spdMod spdStat 1 defenderL
         SpecialDown1Effect -> statModifierDownEffect spcMod spcStat 1 defenderL
+        ConfusionEffect -> do
+            alreadyConfused <- use (cloneLens defenderL . fpData . isConfused)
+            when (not alreadyConfused) $ do
+                numTurns <- getRandomR (2, 5)
+                cloneLens defenderL . fpData . isConfused .= True
+                cloneLens defenderL . fpData . confusionCounter .= numTurns
         _ -> pure ()
 
 -- TODO: Account for using items on non-lead pokemon.
 useItem :: (MonadBattle m, MonadRandom m) => ALens' BattleState (FromParty Participant) -> Item -> m ()
-useItem target item = pure ()
+useItem targetL item =
+    case item of
+        XAccuracy -> cloneLens targetL . fpData . usingXAccuracy .= True
+        XAttack -> modifyAtk 1 targetL
+        XDefend -> modifyDef 1 targetL
+        XSpeed -> modifySpd 1 targetL
+        XSpecial -> modifySpc 1 targetL
+        _ -> pure ()
 
 runTurn :: (MonadBattle m, MonadRandom m) => m PlayerBattleAction -> m Move -> m Bool -> m ()
 runTurn playerStrategy enemyStrategy enemySpecialAI = do
@@ -416,16 +472,27 @@ runTurn playerStrategy enemyStrategy enemySpecialAI = do
                             EQ -> getRandom
             if playerFirst
                 then do
-                    useMove playerActive enemyActive move
+                    -- Player turn starts here
+                    canMove <- statusCheck playerActive
+                    when canMove $ useMove playerActive enemyActive move
                     enemyHP <- use (enemyActive . fpData . partyData . pCurHP)
                     when (enemyHP > 0) $ do
+                        -- Enemy turn starts here
                         usedSpecialAI <- enemySpecialAI
-                        when (not usedSpecialAI) $ useMove enemyActive playerActive enemyMove
+                        when (not usedSpecialAI) $ do
+                            canMove <- statusCheck enemyActive
+                            when canMove $ useMove enemyActive playerActive enemyMove
                 else do
+                    -- Enemy turn starts here
                     usedSpecialAI <- enemySpecialAI
-                    when (not usedSpecialAI) $ useMove enemyActive playerActive enemyMove
+                    when (not usedSpecialAI) $ do
+                        canMove <- statusCheck enemyActive
+                        when canMove $ useMove enemyActive playerActive enemyMove
                     playerHP <- use (playerActive . fpData . partyData . pCurHP)
-                    when (playerHP > 0) $ useMove playerActive enemyActive move
+                    when (playerHP > 0) $ do
+                        -- Player turn starts here
+                        canMove <- statusCheck playerActive
+                        when canMove $ useMove playerActive enemyActive move
             pure ()
         PUseItem item -> do
             useItem playerActive item
@@ -466,6 +533,7 @@ simulateBattle playerStrategy enemyStrategy enemySpecialAI = do
         Just r -> pure r
 
 -- TODO: Apply Burn/Paralysis modifiers
+-- TODO: Fix behavior when modifying a stat already at +/-6 (no badge boost should be applied).
 modifyStat :: MonadBattle m => ALens' StatMods Integer -> ALens' Stats Integer -> Integer -> ALens' BattleState (FromParty Participant) -> m ()
 modifyStat statModL statL modDelta targetL = do
     newMod <- cloneLens targetL . fpData . battleStatMods . cloneLens statModL <%= clamp (-6) 6 . (+) modDelta

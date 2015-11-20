@@ -18,6 +18,7 @@ data Type
     | Psychic
     | Ice
     | Dragon
+    | Typeless -- For confusion damage, etc
     deriving (Eq, Show, Ord)
 
 data TypeEffectiveness

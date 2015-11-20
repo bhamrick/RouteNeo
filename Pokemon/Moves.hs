@@ -113,6 +113,17 @@ move name effect power ty acc_pct pp =
         , _effect = effect
         }
 
+hitSelfMove :: Move
+hitSelfMove =
+    Move
+        { _moveName = "Hit Self"
+        , _moveType = Typeless
+        , _pp = 0
+        , _power = 40
+        , _accuracy = 256
+        , _effect = NoEffect
+        }
+
 movesByName :: Map String Move
 movesByName = Map.fromList (map (\m -> (m^.moveName, m)) allMoves)
 
