@@ -217,8 +217,7 @@ simulateTrainerBattle offset playerStrategy =
             Just t -> do
                 initialState <- trainerBattleState offset
                 let enemyStrategy = trainerStrategy (t^.tClass)
-                -- TODO: Implement these
-                let enemySpecialAI = noSpecialAI
+                let enemySpecialAI = trainerSpecialAI (t^.tClass)
                 result <- runBattleT (simulateBattle playerStrategy enemyStrategy enemySpecialAI) initialState
                 case result of
                     Left e -> throwError e

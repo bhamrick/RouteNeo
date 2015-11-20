@@ -12,6 +12,7 @@ import Pokemon.Battle
 import Pokemon.Moves
 import Pokemon.Party
 import Pokemon.Species
+import Pokemon.Stats
 import Pokemon.Status
 import Pokemon.Trainer
 import Pokemon.Type
@@ -254,6 +255,69 @@ trainerAIMods c =
         Agatha -> [trainerAIModification1]
         Lance -> [trainerAIModification1, trainerAIModification3]
 
--- TODO: Implement special AIs
 noSpecialAI :: (MonadBattle m, MonadRandom m) => m Bool
 noSpecialAI = pure False
+
+aiRecoverHP :: MonadBattle m => Integer -> m ()
+aiRecoverHP x = do
+    maxHP <- use (enemyActive.fpData.partyData.pStats.hpStat)
+    enemyActive . fpData . partyData . pCurHP %= min maxHP . (+) x
+
+aiUsePotion :: MonadBattle m => m ()
+aiUsePotion = aiRecoverHP 20
+
+aiUseSuperPotion :: MonadBattle m => m ()
+aiUseSuperPotion = aiRecoverHP 50
+
+aiUseHyperPotion :: MonadBattle m => m ()
+aiUseHyperPotion = aiRecoverHP 200
+
+aiCheckIfHPBelowFraction :: MonadBattle m => Integer -> m Bool
+aiCheckIfHPBelowFraction n = do
+    maxHP <- use (enemyActive.fpData.partyData.pStats.hpStat)
+    curHP <- use (enemyActive.fpData.partyData.pCurHP)
+    pure (curHP < (maxHP `div` n))
+
+aiSwitchIfEnoughMons :: MonadBattle m => m Bool
+aiSwitchIfEnoughMons = do
+    party <- use enemyBench
+    if any (\p -> p^.fpData.pCurHP > 0) party
+    then do
+        enemyDefaultSwitch
+        pure True
+    else
+        pure False
+
+-- TODO: Implement special AIs
+trainerSpecialAI :: (MonadBattle m, MonadRandom m) => TrainerClass -> m Bool
+trainerSpecialAI c =
+    case c of
+        Juggler -> error "Juggler AI not implemented"
+        Blackbelt -> error "Blackbelt AI not implemented"
+        Giovanni -> error "Giovanni AI not implemented"
+        CoolTrainerM -> error "CoolTrainerM AI not implemented"
+        CoolTrainerF -> error "CoolTrainerF AI not implemented"
+        Bruno -> error "Bruno AI not implemented"
+        Brock -> error "Brock AI not implemented"
+        Misty -> error "Misty AI not implemented"
+        LtSurge -> error "Lt Surge AI not implemented"
+        Erika -> error "Erika AI not implemented"
+        Koga -> error "Koga AI not implemented"
+        Blaine -> error "Blaine AI not implemented"
+        Sabrina -> error "Sabrina AI not implemented"
+        Rival2 -> error "Rival2 AI not implemented"
+        Rival3 -> error "Rival3 AI not implemented"
+        Lorelei -> error "Lorelei AI not implemented"
+        Agatha -> do
+            x <- getRandomR (0, 255)
+            if x < (20 :: Integer)
+            then aiSwitchIfEnoughMons
+            else do
+                lowHP <- aiCheckIfHPBelowFraction 5
+                if lowHP && x < 128
+                then do
+                    aiUseSuperPotion
+                    pure True
+                else pure False
+        Lance -> error "Lance AI not implemented"
+        _ -> noSpecialAI
