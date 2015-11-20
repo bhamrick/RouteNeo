@@ -22,6 +22,7 @@ import Pokemon.Moves
 import Pokemon.Party
 import Pokemon.Species
 import Pokemon.Stats
+import Pokemon.Status
 import Pokemon.Type
 
 data StatMods =
@@ -77,6 +78,7 @@ data Participant =
         , _usingXAccuracy :: Bool
         , _isConfused :: Bool
         , _confusionCounter :: Integer
+        , _movePrevented :: Bool
         }
     deriving (Eq, Show, Ord)
 
@@ -277,6 +279,7 @@ participant enemy bs p =
         , _usingXAccuracy = False
         , _isConfused = False
         , _confusionCounter = 0
+        , _movePrevented = False
         }
     & recomputeStats
 
@@ -365,9 +368,34 @@ earlyReturn e = ExceptT (pure $ Left e)
 
 statusCheck :: (MonadBattle m, MonadRandom m) => ALens' BattleState (FromParty Participant) -> m Bool
 statusCheck attackerL = fmap (either id id) . runExceptT $ do
+    prevented <- use (cloneLens attackerL . fpData . movePrevented)
+    when prevented $ earlyReturn False
+    passSleep <- lift $ sleepCheck attackerL
+    when (not passSleep) $ earlyReturn False
+    passFreeze <- lift $ freezeCheck attackerL
+    when (not passFreeze) $ earlyReturn False
     passConfused <- lift $ confusionCheck attackerL
     when (not passConfused) $ earlyReturn False
     pure True
+
+sleepCheck :: (MonadBattle m, MonadRandom m) => ALens' BattleState (FromParty Participant) -> m Bool
+sleepCheck attackerL = do
+    curStatus <- use (cloneLens attackerL . fpData . partyData . pStatus)
+    case curStatus of
+        SLP 1 -> do
+            cloneLens attackerL . fpData . partyData . pStatus .= Healthy
+            pure True
+        SLP n -> do
+            cloneLens attackerL . fpData . partyData . pStatus .= SLP (n-1)
+            pure False
+        _ -> pure True
+
+freezeCheck :: (MonadBattle m, MonadRandom m) => ALens' BattleState (FromParty Participant) -> m Bool
+freezeCheck attackerL = do
+    curStatus <- use (cloneLens attackerL . fpData . partyData . pStatus)
+    case curStatus of
+        FRZ -> pure False
+        _ -> pure True
 
 confusionCheck :: (MonadBattle m, MonadRandom m) => ALens' BattleState (FromParty Participant) -> m Bool
 confusionCheck attackerL = do
@@ -396,7 +424,15 @@ confusionCheck attackerL = do
 useMove :: (MonadBattle m, MonadRandom m) => ALens' BattleState (FromParty Participant) -> ALens' BattleState (FromParty Participant) -> Move -> m ()
 useMove attackerL defenderL m =
     fmap (fromMaybe ()) . runMaybeT $ do
-        moveHits <- do
+        moveHits <- fmap (either id id) . runExceptT $ do
+            when (m^.effect == DreamEaterEffect) $ do
+                s <- use (cloneLens defenderL . fpData . partyData . pStatus)
+                case s of
+                    SLP _ -> pure ()
+                    _ -> earlyReturn False
+            when (m^.effect == SwiftEffect) $ earlyReturn True
+            hasXAcc <- use (cloneLens attackerL . fpData . usingXAccuracy)
+            when hasXAcc $ earlyReturn True
             accByte <- getRandomR (0, 255)
             pure (accByte < m^.accuracy)
         when (not moveHits) abort
@@ -431,6 +467,43 @@ executeMoveEffect attackerL defenderL effect =
         DefenseDown1Effect -> statModifierDownEffect defMod defStat 1 defenderL
         SpeedDown1Effect -> statModifierDownEffect spdMod spdStat 1 defenderL
         SpecialDown1Effect -> statModifierDownEffect spcMod spcStat 1 defenderL
+        HazeEffect -> do
+            -- TODO: Complete all the effects.
+            cloneLens attackerL . fpData . battleStatMods .= defaultStatMods
+            cloneLens defenderL . fpData . battleStatMods .= defaultStatMods
+            
+            attackerPartyStats <- use (cloneLens attackerL . fpData . partyData . pStats)
+            cloneLens attackerL . fpData . battleStats .= attackerPartyStats
+            defenderPartyStats <- use (cloneLens defenderL . fpData . partyData . pStats)
+            cloneLens defenderL . fpData . battleStats .= defenderPartyStats
+
+            cloneLens attackerL . fpData . partyData . pStatus .= Healthy
+            defenderStatus <- cloneLens defenderL . fpData . partyData . pStatus <<.= Healthy
+            case defenderStatus of
+                SLP _ -> cloneLens defenderL . fpData . movePrevented .= True
+                FRZ -> cloneLens defenderL . fpData . movePrevented .= True
+                _ -> pure ()
+
+            -- TODO: Clear disabled move
+            -- TODO: Clear Mist / Guard Spec
+            -- TODO: Clear Focus Energy
+            -- TODO: Clear Leech Seed
+            -- TODO: Clear Toxic
+            -- TODO: Clear Reflect, Light Screen
+
+            cloneLens attackerL . fpData . isConfused .= False
+            cloneLens attackerL . fpData . usingXAccuracy .= False
+            cloneLens defenderL . fpData . isConfused .= False
+            cloneLens defenderL . fpData . usingXAccuracy .= False
+
+            pure ()
+        SleepEffect -> do
+            curStatus <- use (cloneLens defenderL . fpData . partyData . pStatus)
+            case curStatus of
+                Healthy -> do
+                    turns <- getRandomR (1, 7)
+                    cloneLens defenderL . fpData . partyData . pStatus .= SLP turns
+                _ -> pure ()
         ConfusionEffect -> do
             alreadyConfused <- use (cloneLens defenderL . fpData . isConfused)
             when (not alreadyConfused) $ do
@@ -453,6 +526,8 @@ useItem targetL item =
 runTurn :: (MonadBattle m, MonadRandom m) => m PlayerBattleAction -> m Move -> m Bool -> m ()
 runTurn playerStrategy enemyStrategy enemySpecialAI = do
     -- TODO: Check if player is locked into an action.
+    playerActive . fpData . movePrevented .= False
+    enemyActive . fpData . movePrevented .= False
     playerAction <- playerStrategy
     case playerAction of
         PUseMove move -> do
