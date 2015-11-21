@@ -2,26 +2,30 @@ module Main where
 
 import Control.Lens
 import Control.Monad
+import Control.Monad.Except
 import Control.Monad.IO.Class
 import Data.Foldable
+import Text.Printf
 
 import qualified Data.Map as Map
 import Pokemon.Battle
+import Pokemon.Item
 import Pokemon.Moves
 import Pokemon.Party
 import Pokemon.Route
 import Pokemon.Species
 import Pokemon.Stats
+import Pokemon.Status
 import Pokemon.Trainer
 
 route :: RouteT IO ()
 route = do
     let 
         nidoDVs = DVs
-            { _atkDV = 12
-            , _defDV = 12
-            , _spdDV = 12
-            , _spcDV = 12
+            { _atkDV = 15
+            , _defDV = 15
+            , _spdDV = 15
+            , _spcDV = 15
             }
         squirtleDVs = DVs
             { _atkDV = 13
@@ -30,6 +34,7 @@ route = do
             , _spcDV = 12
             }
 
+    {-
     party .=
         [ partyPokemon (speciesByName Map.! "Squirtle") 5 squirtleDVs ]
     results <- replicateM 100 $ do
@@ -46,6 +51,7 @@ route = do
 
     printTrainerInfo 0x3A1E7
     summarizeResults results
+    -}
 
     party .=
         [ partyPokemon (speciesByName Map.! "NidoranM") 3 nidoDVs
@@ -201,9 +207,117 @@ route = do
     -- Elite Four
     defeatTrainer 0x3A4BB
     defeatTrainer 0x3A3A9
+
+    -- TODO: Figure out why Nidoking isn't already full HP here.
+    party . _head %= \p -> p & pCurHP .~ (p^.pStats.hpStat)
+    let setuplessAgatha :: MonadBattle m => m PlayerBattleAction
+        setuplessAgatha = fmap (either id id) . runExceptT $ do
+            player <- use playerActive
+            when (player^.fpIndex /= 0) $ earlyReturn PForfeit
+            case player^.fpData.partyData.pStatus of
+                SLP _ -> earlyReturn (PUseItem Pokeflute)
+                _ -> pure ()
+            enemy <- use enemyActive
+            case enemy^.fpIndex of
+                0 -> pure $ PUseMove (movesByName Map.! "Earthquake")
+                1 -> pure $ PUseMove (movesByName Map.! "Ice Beam")
+                2 -> pure $ PUseMove (movesByName Map.! "Earthquake")
+                3 -> pure $ PUseMove (movesByName Map.! "Earthquake")
+                4 -> pure $ PUseMove (movesByName Map.! "Earthquake")
+                _ -> lift $ throwError "Unknown enemy index"
+        xspeedAgatha :: MonadBattle m => m PlayerBattleAction
+        xspeedAgatha = fmap (either id id) . runExceptT $ do
+            player <- use playerActive
+            when (player^.fpIndex /= 0) $ earlyReturn PForfeit
+            case player^.fpData.partyData.pStatus of
+                SLP _ -> earlyReturn (PUseItem Pokeflute)
+                _ -> pure ()
+            when (player^.fpData.turnsInBattle == 0) $ earlyReturn (PUseItem XSpeed)
+            enemy <- use enemyActive
+            case enemy^.fpIndex of
+                0 -> pure $ PUseMove (movesByName Map.! "Earthquake")
+                1 -> pure $ PUseMove (movesByName Map.! "Ice Beam")
+                2 -> pure $ PUseMove (movesByName Map.! "Earthquake")
+                3 -> pure $ PUseMove (movesByName Map.! "Earthquake")
+                4 -> pure $ PUseMove (movesByName Map.! "Earthquake")
+                _ -> lift $ throwError "Unknown enemy index"
+        xspecialAgatha :: MonadBattle m => m PlayerBattleAction
+        xspecialAgatha = fmap (either id id) . runExceptT $ do
+            player <- use playerActive
+            when (player^.fpIndex /= 0) $ earlyReturn PForfeit
+            case player^.fpData.partyData.pStatus of
+                SLP _ -> earlyReturn (PUseItem Pokeflute)
+                _ -> pure ()
+            when (player^.fpData.turnsInBattle == 0) $ earlyReturn (PUseItem XSpecial)
+            enemy <- use enemyActive
+            case enemy^.fpIndex of
+                0 -> pure $ PUseMove (movesByName Map.! "Earthquake")
+                1 -> pure $ PUseMove (movesByName Map.! "Ice Beam")
+                2 -> pure $ PUseMove (movesByName Map.! "Earthquake")
+                3 -> pure $ PUseMove (movesByName Map.! "Earthquake")
+                4 -> pure $ PUseMove (movesByName Map.! "Earthquake")
+                _ -> lift $ throwError "Unknown enemy index"
+        xaccAgatha :: MonadBattle m => m PlayerBattleAction
+        xaccAgatha = fmap (either id id) . runExceptT $ do
+            player <- use playerActive
+            when (player^.fpIndex /= 0) $ earlyReturn PForfeit
+            case player^.fpData.partyData.pStatus of
+                SLP _ -> earlyReturn (PUseItem Pokeflute)
+                _ -> pure ()
+            when (player^.fpData.turnsInBattle == 0) $ earlyReturn (PUseItem XAccuracy)
+            enemy <- use enemyActive
+            case enemy^.fpIndex of
+                0 -> pure $ PUseMove (movesByName Map.! "Earthquake")
+                1 -> pure $ PUseMove (movesByName Map.! "Horn Drill")
+                2 -> pure $ PUseMove (movesByName Map.! "Earthquake")
+                3 -> pure $ PUseMove (movesByName Map.! "Earthquake")
+                4 -> pure $ PUseMove (movesByName Map.! "Earthquake")
+                _ -> lift $ throwError "Unknown enemy index"
+        xaccxspdAgatha :: MonadBattle m => m PlayerBattleAction
+        xaccxspdAgatha = fmap (either id id) . runExceptT $ do
+            player <- use playerActive
+            when (player^.fpIndex /= 0) $ earlyReturn PForfeit
+            case player^.fpData.partyData.pStatus of
+                SLP _ -> earlyReturn (PUseItem Pokeflute)
+                _ -> pure ()
+            when (player^.fpData.turnsInBattle == 0) $ earlyReturn (PUseItem XAccuracy)
+            enemy <- use enemyActive
+            when (enemy^.fpIndex == 1) $ earlyReturn (PUseMove (movesByName Map.! "Horn Drill"))
+            when (player^.fpData.battleStatMods.spdMod == 0) $ earlyReturn (PUseItem XSpeed)
+            case enemy^.fpIndex of
+                0 -> pure $ PUseMove (movesByName Map.! "Earthquake")
+                1 -> pure $ PUseMove (movesByName Map.! "Horn Drill")
+                2 -> pure $ PUseMove (movesByName Map.! "Earthquake")
+                3 -> pure $ PUseMove (movesByName Map.! "Earthquake")
+                4 -> pure $ PUseMove (movesByName Map.! "Earthquake")
+                _ -> lift $ throwError "Unknown enemy index"
+
+    printRanges
+
+    printTrainerInfo 0x3A516
+    liftIO $ printf "\nSetupless\n=========\n"
+    results <- replicateM 10000 $ simulateTrainerBattle 0x3A516 setuplessAgatha
+    summarizeResults results
+    liftIO $ printf "\nXSpeed\n=========\n"
+    results <- replicateM 10000 $ simulateTrainerBattle 0x3A516 xspeedAgatha
+    summarizeResults results
+    liftIO $ printf "\nXSpecial\n=========\n"
+    results <- replicateM 10000 $ simulateTrainerBattle 0x3A516 xspecialAgatha
+    summarizeResults results
+    liftIO $ printf "\nXAccuracy\n=========\n"
+    results <- replicateM 10000 $ simulateTrainerBattle 0x3A516 xaccAgatha
+    summarizeResults results
+    liftIO $ printf "\nXAccuracy + XSpeed\n=========\n"
+    results <- replicateM 10000 $ simulateTrainerBattle 0x3A516 xaccxspdAgatha
+    summarizeResults results
+
     defeatTrainer 0x3A516
     defeatTrainer 0x3A522
     defeatTrainer 0x3A49F
 
 main :: IO ()
-main = void $ runRouteT route emptyParty
+main = do
+    res <- runRouteT route emptyParty
+    case res of
+        Left e -> printf "Error: %s\n" e
+        Right _ -> pure ()

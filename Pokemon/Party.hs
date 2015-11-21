@@ -56,7 +56,13 @@ checkLevelUp poke
         nextLevelExp = lowestExpForLevel (poke^.pSpecies.expCurve) (poke^.pLevel+1)
         in
         if poke^.pExperience >= nextLevelExp
-        then checkLevelUp (updateStats (poke & pLevel +~ 1 & pStatExpAtLevel .~ poke^.pStatExp))
+        then
+            let
+            poke' = poke
+                & pLevel +~ 1
+                & pStatExpAtLevel .~ poke^.pStatExp
+                & updateStats
+            in checkLevelUp (poke' & pCurHP +~ (poke'^.pStats.hpStat - poke^.pStats.hpStat))
         else poke
 
 defeatPokemon' :: Species -> Integer -> Bool -> Integer -> PartyPokemon -> PartyPokemon

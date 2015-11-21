@@ -198,6 +198,7 @@ trainerBattleState offset =
                                         ) [1..] eRest
                                     , _playerBadges = curBadges
                                     , _turnCount = 0
+                                    , _halfTurnCount = 0
                                     }
 
 defeatTrainerWithRanges :: (MonadRoute m, MonadIO m) => Integer -> m ()
@@ -242,10 +243,14 @@ summarizeResults results =
             lossCount = length . filter (\(r, _) -> r == Defeat) $ results
             turnCounts = map (\(_, s) -> s^.turnCount) results
             victoryTurnCounts = map (\(_, s) -> s^.turnCount) . filter (\(r, _) -> r == Victory) $ results
+            halfTurnCounts = map (\(_, s) -> s^.halfTurnCount) results
+            victoryHalfTurnCounts = map (\(_, s) -> s^.halfTurnCount) . filter (\(r, _) -> r == Victory) $ results
             numTrials = length results
         liftIO $ printf "Winrate %.2f%% (%d/%d)\n" (100 * fromIntegral winCount / fromIntegral numTrials :: Double) winCount numTrials
         liftIO $ printf "Average turns: %.2f\n" (fromIntegral (sum turnCounts) / fromIntegral (length turnCounts) :: Double)
         liftIO $ printf "Average victory turns: %.2f\n" (fromIntegral (sum victoryTurnCounts) / fromIntegral (length victoryTurnCounts) :: Double)
+        liftIO $ printf "Average half turns: %.2f\n" (fromIntegral (sum halfTurnCounts) / fromIntegral (length halfTurnCounts) :: Double)
+        liftIO $ printf "Average victory half turns: %.2f\n" (fromIntegral (sum victoryHalfTurnCounts) / fromIntegral (length victoryHalfTurnCounts) :: Double)
         liftIO $ printf "Turn distribution:\n"
-        for_ (reverse . sortOn snd . counts . map (\(r, s) -> (r, s^.turnCount)) $ results) $ \((r, t), n) -> do
-            liftIO $ printf "  %d turn %s: %.2f%%\n" t (show r) (100 * fromInteger n / fromIntegral numTrials :: Double)
+        for_ (reverse . sortOn snd . counts . map (\(r, s) -> (r, s^.turnCount, s^.halfTurnCount)) $ results) $ \((r, t, ht), n) -> do
+            liftIO $ printf "  %d turn %s (%d half-turns): %.2f%%\n" t (show r) ht (100 * fromInteger n / fromIntegral numTrials :: Double)

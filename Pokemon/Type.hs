@@ -46,6 +46,7 @@ physicality t = case t of
     Psychic -> Special
     Ice -> Special
     Dragon -> Special
+    Typeless -> Physical
 
 super :: TypeEffectiveness
 super = Effective 1
