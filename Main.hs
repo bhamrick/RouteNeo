@@ -4,7 +4,9 @@ import Control.Lens
 import Control.Monad
 import Control.Monad.Except
 import Control.Monad.IO.Class
+import Control.Monad.State
 import Data.Foldable
+import System.IO
 import Text.Printf
 
 import qualified Data.Map as Map
@@ -18,14 +20,21 @@ import Pokemon.Stats
 import Pokemon.Status
 import Pokemon.Trainer
 
+localState :: MonadState s m => m a -> m a
+localState x = do
+    s <- get
+    r <- x
+    put s
+    pure r
+
 route :: RouteT IO ()
 route = do
     let 
         nidoDVs = DVs
-            { _atkDV = 15
-            , _defDV = 15
-            , _spdDV = 15
-            , _spcDV = 15
+            { _atkDV = 9
+            , _defDV = 0
+            , _spdDV = 0
+            , _spcDV = 0
             }
         squirtleDVs = DVs
             { _atkDV = 13
@@ -295,21 +304,55 @@ route = do
     printRanges
 
     printTrainerInfo 0x3A516
+    {-
     liftIO $ printf "\nSetupless\n=========\n"
-    results <- replicateM 10000 $ simulateTrainerBattle 0x3A516 setuplessAgatha
+    results <- replicateM trials $ simulateTrainerBattle 0x3A516 setuplessAgatha
     summarizeResults results
     liftIO $ printf "\nXSpeed\n=========\n"
-    results <- replicateM 10000 $ simulateTrainerBattle 0x3A516 xspeedAgatha
+    results <- replicateM trials $ simulateTrainerBattle 0x3A516 xspeedAgatha
     summarizeResults results
     liftIO $ printf "\nXSpecial\n=========\n"
-    results <- replicateM 10000 $ simulateTrainerBattle 0x3A516 xspecialAgatha
+    results <- replicateM trials $ simulateTrainerBattle 0x3A516 xspecialAgatha
     summarizeResults results
     liftIO $ printf "\nXAccuracy\n=========\n"
-    results <- replicateM 10000 $ simulateTrainerBattle 0x3A516 xaccAgatha
+    results <- replicateM trials $ simulateTrainerBattle 0x3A516 xaccAgatha
     summarizeResults results
     liftIO $ printf "\nXAccuracy + XSpeed\n=========\n"
-    results <- replicateM 10000 $ simulateTrainerBattle 0x3A516 xaccxspdAgatha
+    results <- replicateM trials $ simulateTrainerBattle 0x3A516 xaccxspdAgatha
     summarizeResults results
+    -}
+    let trials = 1000
+        createAgathaChart strat =
+            localState $ do
+                liftIO $ printf "       |"
+                for_ ([0..15] :: [Integer]) $ \spc -> do
+                    liftIO $ printf "    %2d SPC    |" spc
+                liftIO $ printf "\n"
+                for_ [0..15] $ \spd -> do
+                    liftIO $ printf "%2d SPD |" spd
+                    for_ [0..15] $ \spc -> do
+                        party . _head . pDVs . spdDV .= spd
+                        party . _head . pDVs . spcDV .= spc
+                        party . _head %= updateStats
+                        results <- replicateM trials $ simulateTrainerBattle 0x3A516 strat
+                        let victoryHalfTurnCounts = map (\(_, s) -> s^.halfTurnCount) . filter (\(r, _) -> r == Victory) $ results
+                            avg = fromIntegral (sum victoryHalfTurnCounts) / fromIntegral (length victoryHalfTurnCounts) :: Double
+                            numWins = length . filter (\(r, _) -> r == Victory) $ results
+                            winrate = 100 * fromIntegral numWins / fromIntegral trials :: Double
+                        liftIO $ printf " %4.1f%% %6.2f |" winrate avg
+                        liftIO $ hFlush stdout
+                    liftIO $ printf "\n"
+                
+    liftIO $ printf "\nSetupless\n=========\n"
+    createAgathaChart setuplessAgatha
+    liftIO $ printf "\nXSpeed\n=========\n"
+    createAgathaChart xspeedAgatha
+    liftIO $ printf "\nXSpecial\n=========\n"
+    createAgathaChart xspecialAgatha
+    liftIO $ printf "\nXAccuracy\n=========\n"
+    createAgathaChart xaccAgatha
+    liftIO $ printf "\nXAccuracy + XSpeed\n=========\n"
+    createAgathaChart xaccxspdAgatha
 
     defeatTrainer 0x3A516
     defeatTrainer 0x3A522
