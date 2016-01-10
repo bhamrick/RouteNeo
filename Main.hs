@@ -6,6 +6,7 @@ import Control.Monad.Except
 import Control.Monad.IO.Class
 import Control.Monad.State
 import Data.Foldable
+import Data.Maybe
 import System.IO
 import Text.Printf
 
@@ -31,10 +32,10 @@ route :: RouteT IO ()
 route = do
     let 
         nidoDVs = DVs
-            { _atkDV = 9
+            { _atkDV = 15
             , _defDV = 0
-            , _spdDV = 0
-            , _spcDV = 0
+            , _spdDV = 15
+            , _spcDV = 15
             }
         squirtleDVs = DVs
             { _atkDV = 13
@@ -88,17 +89,22 @@ route = do
 
     -- Mt Moon
     defeatTrainer 0x39F26
-    defeatTrainer 0x39E1C
+    -- defeatTrainer 0x39E1C
 
-    party . _head %= defeatPokemon' (speciesByName Map.! "Zubat") 8 False 1
-    party . _head %= defeatPokemon' (speciesByName Map.! "Zubat") 8 False 1
-    party . _head %= defeatPokemon' (speciesByName Map.! "Zubat") 8 False 1
+    -- party . _head %= defeatPokemon' (speciesByName Map.! "Zubat") 8 False 1
+    -- party . _head %= defeatPokemon' (speciesByName Map.! "Zubat") 8 False 1
+    -- party . _head %= defeatPokemon' (speciesByName Map.! "Zubat") 8 False 1
+    
+    printStats
+    defeatTrainer 0x3A29C
+    printStats
+    defeatTrainerWithRanges 0x39F2A
+    printStats
 
     evolveTo "Nidorino"
     evolveTo "Nidoking"
-    
-    defeatTrainer 0x3A29C
-    defeatTrainer 0x39F2A
+    learnMove "Mega Punch"
+    learnMove "Water Gun"
 
     -- Nugget Bridge
     defeatTrainer 0x3A209
@@ -106,20 +112,25 @@ route = do
     defeatTrainer 0x39E27
     defeatTrainer 0x39DA5
     defeatTrainer 0x39E23
-    party . _head %= rarecandy
-    party . _head %= rarecandy
-    learnMove "Thrash"
-    unlearnMove "Leer"
+    defeatTrainer 0x39E80
     defeatTrainer 0x3A2B0
 
     -- Route 25
-    defeatTrainer 0x39F63
-    defeatTrainer 0x39E2b
+    defeatTrainerWithRanges 0x39F63 -- WG Skip hiker
+    -- defeatTrainer 0x39F6D
+    -- defeatTrainerWithRanges 0x39DAA
+    defeatTrainer 0x39E2B
     defeatTrainer 0x39E7C
+    -- defeatTrainerWithRanges 0x39DB1
     defeatTrainer 0x39E2F
 
     -- Cerulean Gym
     defeatTrainer 0x39E9D
+    printStats
+    party . _head %= rarecandy
+    party . _head %= rarecandy
+    learnMove "Thrash"
+    unlearnMove "Leer"
     defeatTrainer 0x3A3BB
 
     -- Route 6
@@ -320,7 +331,6 @@ route = do
     liftIO $ printf "\nXAccuracy + XSpeed\n=========\n"
     results <- replicateM trials $ simulateTrainerBattle 0x3A516 xaccxspdAgatha
     summarizeResults results
-    -}
     let trials = 1000
         createAgathaChart strat =
             localState $ do
@@ -353,6 +363,7 @@ route = do
     createAgathaChart xaccAgatha
     liftIO $ printf "\nXAccuracy + XSpeed\n=========\n"
     createAgathaChart xaccxspdAgatha
+    -}
 
     defeatTrainer 0x3A516
     defeatTrainer 0x3A522
@@ -363,4 +374,4 @@ main = do
     res <- runRouteT route emptyParty
     case res of
         Left e -> printf "Error: %s\n" e
-        Right _ -> pure ()
+        Right _ -> printf "Total pokemon defeated: %d\n" (fromJust $ res^?_Right._2.pokemonDefeated)

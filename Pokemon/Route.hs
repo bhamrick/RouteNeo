@@ -27,6 +27,7 @@ data RouteState =
     RouteState
         { _party :: [PartyPokemon]
         , _badges :: Badges
+        , _pokemonDefeated :: Int
         }
     deriving (Eq, Show, Ord)
 
@@ -37,6 +38,7 @@ emptyParty =
     RouteState
         { _party = []
         , _badges = noBadges
+        , _pokemonDefeated = 0
         }
 
 newtype RouteT m a = RouteT { unRouteT :: StateT RouteState (ExceptT String m) a }
@@ -86,6 +88,7 @@ runTrainer offset battle =
     do
         initialState <- trainerBattleState offset
         result <- liftIO $ runBattleT battle initialState
+        pokemonDefeated += 1 + length (initialState^.enemyBench)
         case result of
             Left e -> throwError e
             Right (_, endState) -> party .= partyAfterBattle endState
