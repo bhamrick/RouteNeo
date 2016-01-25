@@ -32,10 +32,10 @@ route :: RouteT IO ()
 route = do
     let 
         nidoDVs = DVs
-            { _atkDV = 15
-            , _defDV = 0
-            , _spdDV = 15
-            , _spcDV = 15
+            { _atkDV = 13
+            , _defDV = 12
+            , _spdDV = 13
+            , _spcDV = 13
             }
         squirtleDVs = DVs
             { _atkDV = 13
@@ -95,11 +95,8 @@ route = do
     -- party . _head %= defeatPokemon' (speciesByName Map.! "Zubat") 8 False 1
     -- party . _head %= defeatPokemon' (speciesByName Map.! "Zubat") 8 False 1
     
-    printStats
     defeatTrainer 0x3A29C
-    printStats
-    defeatTrainerWithRanges 0x39F2A
-    printStats
+    defeatTrainer 0x39F2A
 
     evolveTo "Nidorino"
     evolveTo "Nidoking"
@@ -116,7 +113,7 @@ route = do
     defeatTrainer 0x3A2B0
 
     -- Route 25
-    defeatTrainerWithRanges 0x39F63 -- WG Skip hiker
+    defeatTrainer 0x39F63 -- WG Skip hiker
     -- defeatTrainer 0x39F6D
     -- defeatTrainerWithRanges 0x39DAA
     defeatTrainer 0x39E2B
@@ -126,7 +123,6 @@ route = do
 
     -- Cerulean Gym
     defeatTrainer 0x39E9D
-    printStats
     party . _head %= rarecandy
     party . _head %= rarecandy
     learnMove "Thrash"
@@ -312,10 +308,47 @@ route = do
                 4 -> pure $ PUseMove (movesByName Map.! "Earthquake")
                 _ -> lift $ throwError "Unknown enemy index"
 
-    printRanges
-
-    printTrainerInfo 0x3A516
     {-
+    let trials = 10000
+    do
+        fout <- liftIO $ openFile "setupless_frames.csv" WriteMode
+        liftIO $ printf "Running %d trials Setupless\n" trials
+        replicateM_ trials $ do
+            res <- simulateTrainerBattle 0x3A516 setuplessAgatha
+            when (res^._1 == Victory) $ liftIO $ hPrint fout (res^._2.frameCount)
+        liftIO $ hClose fout
+    do
+        fout <- liftIO $ openFile "xspeed_frames.csv" WriteMode
+        liftIO $ printf "Running %d trials with XSpeed\n" trials
+        replicateM_ trials $ do
+            res <- simulateTrainerBattle 0x3A516 xspeedAgatha
+            when (res^._1 == Victory) $ liftIO $ hPrint fout (res^._2.frameCount)
+        liftIO $ hClose fout
+    do
+        fout <- liftIO $ openFile "xspecial_frames.csv" WriteMode
+        liftIO $ printf "Running %d trials with XSpecial\n" trials
+        replicateM_ trials $ do
+            res <- simulateTrainerBattle 0x3A516 xspecialAgatha
+            when (res^._1 == Victory) $ liftIO $ hPrint fout (res^._2.frameCount)
+        liftIO $ hClose fout
+    do
+        fout <- liftIO $ openFile "xaccuracy_frames.csv" WriteMode
+        liftIO $ printf "Running %d trials with XAccuracy\n" trials
+        replicateM_ trials $ do
+            res <- simulateTrainerBattle 0x3A516 xaccAgatha
+            when (res^._1 == Victory) $ liftIO $ hPrint fout (res^._2.frameCount)
+        liftIO $ hClose fout
+    do
+        fout <- liftIO $ openFile "xaccuracy_xspeed_frames.csv" WriteMode
+        liftIO $ printf "Running %d trials with XAccuracy + XSpeed\n" trials
+        replicateM_ trials $ do
+            res <- simulateTrainerBattle 0x3A516 xaccxspdAgatha
+            when (res^._1 == Victory) $ liftIO $ hPrint fout (res^._2.frameCount)
+        liftIO $ hClose fout
+    -}
+    {-
+    let trials = 1000
+    printTrainerInfo 0x3A516
     liftIO $ printf "\nSetupless\n=========\n"
     results <- replicateM trials $ simulateTrainerBattle 0x3A516 setuplessAgatha
     summarizeResults results
@@ -331,7 +364,8 @@ route = do
     liftIO $ printf "\nXAccuracy + XSpeed\n=========\n"
     results <- replicateM trials $ simulateTrainerBattle 0x3A516 xaccxspdAgatha
     summarizeResults results
-    let trials = 1000
+    -}
+    let trials = 10000
         createAgathaChart strat =
             localState $ do
                 liftIO $ printf "       |"
@@ -349,10 +383,11 @@ route = do
                             avg = fromIntegral (sum victoryHalfTurnCounts) / fromIntegral (length victoryHalfTurnCounts) :: Double
                             numWins = length . filter (\(r, _) -> r == Victory) $ results
                             winrate = 100 * fromIntegral numWins / fromIntegral trials :: Double
-                        liftIO $ printf " %4.1f%% %6.2f |" winrate avg
+                            victoryFrameCounts = map (\(_, s) -> s^.frameCount) . filter (\(r, _) -> r == Victory) $ results
+                            avgFrameCount = fromIntegral (sum victoryFrameCounts) / fromIntegral (length victoryFrameCounts) :: Double
+                        liftIO $ printf " %4.1f%% %6.2f |" winrate avgFrameCount
                         liftIO $ hFlush stdout
                     liftIO $ printf "\n"
-                
     liftIO $ printf "\nSetupless\n=========\n"
     createAgathaChart setuplessAgatha
     liftIO $ printf "\nXSpeed\n=========\n"
@@ -363,7 +398,6 @@ route = do
     createAgathaChart xaccAgatha
     liftIO $ printf "\nXAccuracy + XSpeed\n=========\n"
     createAgathaChart xaccxspdAgatha
-    -}
 
     defeatTrainer 0x3A516
     defeatTrainer 0x3A522
@@ -374,4 +408,4 @@ main = do
     res <- runRouteT route emptyParty
     case res of
         Left e -> printf "Error: %s\n" e
-        Right _ -> printf "Total pokemon defeated: %d\n" (fromJust $ res^?_Right._2.pokemonDefeated)
+        Right _ -> pure () -- printf "Total pokemon defeated: %d\n" (fromJust $ res^?_Right._2.pokemonDefeated)

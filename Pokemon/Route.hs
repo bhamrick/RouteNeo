@@ -202,6 +202,7 @@ trainerBattleState offset =
                                     , _playerBadges = curBadges
                                     , _turnCount = 0
                                     , _halfTurnCount = 0
+                                    , _frameCount = 0
                                     }
 
 defeatTrainerWithRanges :: (MonadRoute m, MonadIO m) => Integer -> m ()

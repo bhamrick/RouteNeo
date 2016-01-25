@@ -284,6 +284,15 @@ aiSwitchIfEnoughMons = do
     if any (\p -> p^.fpData.pCurHP > 0) party
     then do
         enemyDefaultSwitch
+        -- Hack for Agatha timings
+        curPoke <- use (enemyActive . fpIndex)
+        frameCount += case curPoke of
+            0 -> 217
+            1 -> 235
+            2 -> 246
+            3 -> 233
+            4 -> 217
+            _ -> 0
         pure True
     else
         pure False
@@ -317,6 +326,7 @@ trainerSpecialAI c =
                 if lowHP && x < 128
                 then do
                     aiUseSuperPotion
+                    frameCount += 121
                     pure True
                 else pure False
         Lance -> error "Lance AI not implemented"

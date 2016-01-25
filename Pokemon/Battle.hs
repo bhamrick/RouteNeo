@@ -179,6 +179,7 @@ data BattleState =
         , _playerBadges :: Badges
         , _turnCount :: Integer
         , _halfTurnCount :: Integer
+        , _frameCount :: Integer
         }
     deriving (Eq, Show, Ord)
 
@@ -396,6 +397,7 @@ sleepCheck attackerL = do
             cloneLens attackerL . fpData . partyData . pStatus .= Healthy
             pure True
         SLP n -> do
+            frameCount += 102
             cloneLens attackerL . fpData . partyData . pStatus .= SLP (n-1)
             pure False
         _ -> pure True
@@ -416,6 +418,7 @@ confusionCheck attackerL = do
             if turns == 0
                 then do
                     cloneLens attackerL . fpData . isConfused .= False
+                    frameCount += 33
                     pure True
                 else do
                     hitSelf <- getRandom
@@ -424,8 +427,11 @@ confusionCheck attackerL = do
                             attacker <- use (cloneLens attackerL . fpData)
                             let dmg = damage attacker attacker hitSelfMove False maxRange
                             cloneLens attackerL . fpData . partyData . pCurHP %= max 0 . subtract dmg
+                            frameCount += 204
                             pure False
-                    else pure True
+                        else do
+                            frameCount += 85
+                            pure True
         else pure True
 
 paralysisCheck :: (MonadBattle m, MonadRandom m) => ALens' BattleState (FromParty Participant) -> m Bool
@@ -434,12 +440,15 @@ paralysisCheck attackerL = do
     case curStatus of
         PAR -> do
             x <- getRandomR (0, 255)
+            when (x <= (0x39 :: Integer)) $ frameCount += 43
             pure (x > (0x39 :: Integer))
         _ -> pure True
 
 -- TODO: Account for high crit moves
 -- TODO: Complete accuracy check
 -- TODO: Complete move effects
+
+-- Includes hard coded frame numbers that are relevant for Agatha
 useMove :: (MonadBattle m, MonadRandom m) => ALens' BattleState (FromParty Participant) -> ALens' BattleState (FromParty Participant) -> Move -> m ()
 useMove attackerL defenderL m =
     fmap (fromMaybe ()) . runMaybeT $ do
@@ -454,7 +463,46 @@ useMove attackerL defenderL m =
             when hasXAcc $ earlyReturn True
             accByte <- getRandomR (0, 255)
             pure (accByte < m^.accuracy)
-        when (not moveHits) abort
+        when (not moveHits) $ do
+            frameCount += case m^.moveName of
+                "Earthquake" -> 91
+                "Ice Beam" -> 89
+                "Dream Eater" -> 111
+                "Hypnosis" -> 102
+                "Confuse Ray" -> 124
+                "Supersonic" -> 123
+                "Screech" -> 97
+                "Glare" -> 118
+                "Toxic" -> 108
+                -- These numbers are "wrong" because they're an average of the
+                -- miss chance and non-miss chance, but in the right ratio so it
+                -- shouldn't affect average computations
+                "Wing Attack" -> 190
+                "Night Shade" -> 275
+                "Bite" -> 219
+                "Acid" -> 218
+                _ -> 0
+            abort
+        frameCount += case m^.moveName of
+            "Earthquake" -> 192
+            "Ice Beam" -> 140
+            "Dream Eater" -> 111
+            "Hypnosis" -> 102
+            "Confuse Ray" -> 124
+            "Supersonic" -> 123
+            "Screech" -> 97
+            "Glare" -> 153
+            "Toxic" -> 108
+            "Horn Drill" -> 127
+            -- These numbers are "wrong" because they're an average of the
+            -- miss chance and non-miss chance, but in the right ratio so it
+            -- shouldn't affect average computations
+            "Wing Attack" -> 190
+            "Night Shade" -> 275
+            "Bite" -> 219
+            "Acid" -> 218
+            "Haze" -> 120
+            _ -> 0
         damageRoll <- getRandomR (minRange, maxRange)
         attacker <- use (cloneLens attackerL . fpData)
         defender <- use (cloneLens defenderL . fpData)
@@ -462,6 +510,7 @@ useMove attackerL defenderL m =
             attackerBaseSpd <- use (cloneLens attackerL . fpData . partyData . pSpecies . baseSpd)
             critByte <- getRandomR (0, 255)
             pure (critByte < attackerBaseSpd `div` 2)
+        when (isCrit && m^.moveName == "Ice Beam") $ frameCount += 26
         let damageDone = damage attacker defender m isCrit damageRoll
         cloneLens defenderL . fpData . partyData . pCurHP %= max 0 . subtract damageDone
         executeMoveEffect attackerL defenderL (m^.effect)
@@ -477,6 +526,7 @@ statModifierDownEffect modL statL modDelta targetL =
         when (not $ target^.isEnemy) $ do
             missByte <- getRandomR (0, 0xFF)
             when (missByte < (0x40 :: Integer)) abort
+        frameCount += 97
         modifyStat modL statL (-modDelta) targetL
 
 statModifierDownSideEffect :: (MonadBattle m, MonadRandom m) => ALens' StatMods Integer -> ALens' Stats Integer -> Integer -> ALens' BattleState (FromParty Participant) -> m ()
@@ -498,6 +548,7 @@ executeMoveEffect attackerL defenderL effect =
                 Healthy -> do
                     x <- getRandomR (0, 0xFF)
                     when (x < (0x1A :: Integer)) $ do
+                        frameCount += 93
                         cloneLens defenderL . fpData . partyData . pStatus .= FRZ
                 _ -> pure ()
         AttackDown1Effect -> statModifierDownEffect atkMod atkStat 1 defenderL
@@ -537,11 +588,13 @@ executeMoveEffect attackerL defenderL effect =
         FlinchSideEffect1 -> do
             x <- getRandomR (0, 255)
             when (x < (0x1a :: Integer)) $ do
+                frameCount += 34
                 cloneLens defenderL . fpData . movePrevented .= True
         SleepEffect -> do
             curStatus <- use (cloneLens defenderL . fpData . partyData . pStatus)
             case curStatus of
                 Healthy -> do
+                    frameCount += 55
                     turns <- getRandomR (1, 7)
                     cloneLens defenderL . fpData . partyData . pStatus .= SLP turns
                 _ -> pure ()
@@ -553,6 +606,7 @@ executeMoveEffect attackerL defenderL effect =
         ConfusionEffect -> do
             alreadyConfused <- use (cloneLens defenderL . fpData . isConfused)
             when (not alreadyConfused) $ do
+                frameCount += 26
                 numTurns <- getRandomR (2, 5)
                 cloneLens defenderL . fpData . isConfused .= True
                 cloneLens defenderL . fpData . confusionCounter .= numTurns
@@ -589,7 +643,7 @@ executeMoveEffect attackerL defenderL effect =
 
 -- TODO: Account for using items on non-lead pokemon.
 useItem :: (MonadBattle m, MonadRandom m) => ALens' BattleState (FromParty Participant) -> Item -> m ()
-useItem targetL item =
+useItem targetL item = do
     case item of
         XAccuracy -> cloneLens targetL . fpData . usingXAccuracy .= True
         XAttack -> modifyAtk 1 targetL
@@ -605,6 +659,12 @@ useItem targetL item =
             enemyActive . fpData . partyData %= wakeup
             enemyBench . each . fpData %= wakeup
         _ -> pure ()
+    frameCount += case item of
+        XAccuracy -> 63
+        XSpeed -> 167
+        XSpecial -> 169
+        Pokeflute -> 479
+        _ -> 0
 
 runTurn :: (MonadBattle m, MonadRandom m) => m PlayerBattleAction -> m Move -> m Bool -> m ()
 runTurn playerStrategy enemyStrategy enemySpecialAI = do
