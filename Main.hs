@@ -6,6 +6,7 @@ import Control.Monad.Except
 import Control.Monad.IO.Class
 import Control.Monad.State
 import Data.Foldable
+import Data.List
 import Data.Maybe
 import System.IO
 import Text.Printf
@@ -32,10 +33,10 @@ route :: RouteT IO ()
 route = do
     let 
         nidoDVs = DVs
-            { _atkDV = 13
-            , _defDV = 12
-            , _spdDV = 13
-            , _spcDV = 13
+            { _atkDV = 15
+            , _defDV = 15
+            , _spdDV = 15
+            , _spcDV = 15
             }
         squirtleDVs = DVs
             { _atkDV = 13
@@ -311,6 +312,23 @@ route = do
     {-
     let trials = 10000
     do
+        liftIO $ putStrLn "XSpeed"
+        damageResults <- replicateM trials $ do
+            res <- simulateTrainerBattle 0x3A516 xspeedAgatha
+            pure (res^._2.playerActive.fpData.partyData.pStats.hpStat - res^._2.playerActive.fpData.partyData.pCurHP)
+        let damageDist = map (\g -> (head g, length g)) . group . sort $ damageResults
+        liftIO $ print damageDist
+    do
+        liftIO $ putStrLn "XSpecial"
+        damageResults <- replicateM trials $ do
+            res <- simulateTrainerBattle 0x3A516 xspecialAgatha
+            pure (res^._2.playerActive.fpData.partyData.pStats.hpStat - res^._2.playerActive.fpData.partyData.pCurHP)
+        let damageDist = map (\g -> (head g, length g)) . group . sort $ damageResults
+        liftIO $ print damageDist
+    -}
+    {-
+    let trials = 10000
+    do
         fout <- liftIO $ openFile "setupless_frames.csv" WriteMode
         liftIO $ printf "Running %d trials Setupless\n" trials
         replicateM_ trials $ do
@@ -347,7 +365,7 @@ route = do
         liftIO $ hClose fout
     -}
     {-
-    let trials = 1000
+    let trials = 10000
     printTrainerInfo 0x3A516
     liftIO $ printf "\nSetupless\n=========\n"
     results <- replicateM trials $ simulateTrainerBattle 0x3A516 setuplessAgatha
@@ -365,7 +383,7 @@ route = do
     results <- replicateM trials $ simulateTrainerBattle 0x3A516 xaccxspdAgatha
     summarizeResults results
     -}
-    let trials = 10000
+    let trials = 1000
         createAgathaChart strat =
             localState $ do
                 liftIO $ printf "       |"
@@ -386,6 +404,7 @@ route = do
                             victoryFrameCounts = map (\(_, s) -> s^.frameCount) . filter (\(r, _) -> r == Victory) $ results
                             avgFrameCount = fromIntegral (sum victoryFrameCounts) / fromIntegral (length victoryFrameCounts) :: Double
                         liftIO $ printf " %4.1f%% %6.2f |" winrate avgFrameCount
+                        -- liftIO $ printf " %4.1f%% %6.2f |" winrate avg
                         liftIO $ hFlush stdout
                     liftIO $ printf "\n"
     liftIO $ printf "\nSetupless\n=========\n"

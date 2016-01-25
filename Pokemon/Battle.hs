@@ -125,7 +125,9 @@ damage attacker defender move crit roll =
             "Psywave" -> 0 -- TODO: Will require a refactor
             _ -> 0
         OHKOEffect -> 0 -- Damage done in effect execution
-        _ -> floor (fromInteger (floor (fromInteger ((floor (fromInteger (attacker^.partyData.pLevel) * (2/5) * (if crit then 2 else 1) + 2) * attack * (move^.power) `div` defense `div` 50) + 2) * (if stab then 3/2 else 1))) * attackRatio effective) * roll `div` 255
+        _ -> if move^.power == 0
+            then 0
+            else floor (fromInteger (floor (fromInteger ((floor (fromInteger (attacker^.partyData.pLevel) * (2/5) * (if crit then 2 else 1) + 2) * attack * (move^.power) `div` defense `div` 50) + 2) * (if stab then 3/2 else 1))) * attackRatio effective) * roll `div` 255
 
 applyStatMods :: StatMods -> Stats -> Stats
 applyStatMods mods stats =
@@ -375,7 +377,7 @@ defeatBattleWithRanges = do
 earlyReturn :: Applicative m => e -> ExceptT e m a
 earlyReturn e = ExceptT (pure $ Left e)
 
-statusCheck :: (MonadBattle m, MonadRandom m) => ALens' BattleState (FromParty Participant) -> m Bool
+statusCheck :: (MonadIO m, MonadBattle m, MonadRandom m) => ALens' BattleState (FromParty Participant) -> m Bool
 statusCheck attackerL = fmap (either id id) . runExceptT $ do
     prevented <- use (cloneLens attackerL . fpData . movePrevented)
     when prevented $ earlyReturn False
@@ -402,14 +404,16 @@ sleepCheck attackerL = do
             pure False
         _ -> pure True
 
-freezeCheck :: (MonadBattle m, MonadRandom m) => ALens' BattleState (FromParty Participant) -> m Bool
+freezeCheck :: (MonadIO m, MonadBattle m, MonadRandom m) => ALens' BattleState (FromParty Participant) -> m Bool
 freezeCheck attackerL = do
     curStatus <- use (cloneLens attackerL . fpData . partyData . pStatus)
     case curStatus of
-        FRZ -> pure False
+        FRZ -> do
+            -- liftIO $ putStrLn "Frozen solid"
+            pure False
         _ -> pure True
 
-confusionCheck :: (MonadBattle m, MonadRandom m) => ALens' BattleState (FromParty Participant) -> m Bool
+confusionCheck :: (MonadIO m, MonadBattle m, MonadRandom m) => ALens' BattleState (FromParty Participant) -> m Bool
 confusionCheck attackerL = do
     confused <- use (cloneLens attackerL . fpData . isConfused)
     if confused
@@ -417,6 +421,7 @@ confusionCheck attackerL = do
             turns <- cloneLens attackerL . fpData . confusionCounter <%= subtract 1
             if turns == 0
                 then do
+                    -- liftIO $ putStrLn "Confused no more"
                     cloneLens attackerL . fpData . isConfused .= False
                     frameCount += 33
                     pure True
@@ -424,6 +429,7 @@ confusionCheck attackerL = do
                     hitSelf <- getRandom
                     if hitSelf
                         then do
+                            -- liftIO $ putStrLn "Hit self"
                             attacker <- use (cloneLens attackerL . fpData)
                             let dmg = damage attacker attacker hitSelfMove False maxRange
                             cloneLens attackerL . fpData . partyData . pCurHP %= max 0 . subtract dmg
@@ -449,8 +455,9 @@ paralysisCheck attackerL = do
 -- TODO: Complete move effects
 
 -- Includes hard coded frame numbers that are relevant for Agatha
-useMove :: (MonadBattle m, MonadRandom m) => ALens' BattleState (FromParty Participant) -> ALens' BattleState (FromParty Participant) -> Move -> m ()
-useMove attackerL defenderL m =
+useMove :: (MonadIO m, MonadBattle m, MonadRandom m) => ALens' BattleState (FromParty Participant) -> ALens' BattleState (FromParty Participant) -> Move -> m ()
+useMove attackerL defenderL m = do
+    -- liftIO $ putStrLn (m^.moveName)
     fmap (fromMaybe ()) . runMaybeT $ do
         moveHits <- fmap (either id id) . runExceptT $ do
             when (m^.effect == DreamEaterEffect) $ do
@@ -642,8 +649,9 @@ executeMoveEffect attackerL defenderL effect =
         _ -> throwError (show effect ++ " not implemented")
 
 -- TODO: Account for using items on non-lead pokemon.
-useItem :: (MonadBattle m, MonadRandom m) => ALens' BattleState (FromParty Participant) -> Item -> m ()
+useItem :: (MonadIO m, MonadBattle m, MonadRandom m) => ALens' BattleState (FromParty Participant) -> Item -> m ()
 useItem targetL item = do
+    -- liftIO $ print item
     case item of
         XAccuracy -> cloneLens targetL . fpData . usingXAccuracy .= True
         XAttack -> modifyAtk 1 targetL
@@ -666,7 +674,7 @@ useItem targetL item = do
         Pokeflute -> 479
         _ -> 0
 
-runTurn :: (MonadBattle m, MonadRandom m) => m PlayerBattleAction -> m Move -> m Bool -> m ()
+runTurn :: (MonadIO m, MonadBattle m, MonadRandom m) => m PlayerBattleAction -> m Move -> m Bool -> m ()
 runTurn playerStrategy enemyStrategy enemySpecialAI = do
     -- TODO: Check if player is locked into an action.
     playerActive . fpData . movePrevented .= False
@@ -746,11 +754,14 @@ runTurn playerStrategy enemyStrategy enemySpecialAI = do
     enemyActive.fpData.turnsInBattle += 1
     turnCount += 1
 
-simulateBattle :: (MonadBattle m, MonadRandom m) => m PlayerBattleAction -> m Move -> m Bool -> m BattleResult
+simulateBattle :: (MonadIO m, MonadBattle m, MonadRandom m) => m PlayerBattleAction -> m Move -> m Bool -> m BattleResult
 simulateBattle playerStrategy enemyStrategy enemySpecialAI = do
     runTurn playerStrategy enemyStrategy enemySpecialAI
     enemyHP <- use (enemyActive . fpData . partyData . pCurHP)
     playerHP <- use (playerActive . fpData . partyData . pCurHP)
+    enemyMaxHP <- use (enemyActive . fpData . partyData . pStats . hpStat)
+    playerMaxHP <- use (playerActive . fpData . partyData . pStats . hpStat)
+    -- liftIO $ print (enemyHP, enemyMaxHP, playerHP, playerMaxHP)
 
     when (enemyHP == 0 && playerHP > 0) $ do
         enemyPokemon <- use (enemyActive.fpData.partyData)

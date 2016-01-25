@@ -62,7 +62,8 @@ checkLevelUp poke
                 & pLevel +~ 1
                 & pStatExpAtLevel .~ poke^.pStatExp
                 & updateStats
-            in checkLevelUp (poke' & pCurHP +~ (poke'^.pStats.hpStat - poke^.pStats.hpStat))
+                & (\p -> p & pCurHP +~ (p^.pStats.hpStat - poke^.pStats.hpStat))
+            in checkLevelUp poke'
         else poke
 
 defeatPokemon' :: Species -> Integer -> Bool -> Integer -> PartyPokemon -> PartyPokemon
@@ -85,6 +86,7 @@ evolveTo' s poke =
         & pSpecies .~ s
         & pStatExpAtLevel .~ (poke^.pStatExp)
         & updateStats
+        & (\p -> p & pCurHP +~ (p^.pStats.hpStat - poke^.pStats.hpStat))
 
 rarecandy :: PartyPokemon -> PartyPokemon
 rarecandy poke

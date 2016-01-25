@@ -36,7 +36,13 @@ speciesByName = Map.fromList (map (\s -> (s^.name, s)) allSpecies)
 
 defaultMoves :: Species -> Integer -> [Move]
 defaultMoves s lvl =
-    map snd . reverse . take 4 . reverse . nub . filter (\(l, _) -> l <= lvl) $ s^.learnset
+    foldl (\moveset newmove ->
+        if newmove `elem` moveset
+        then moveset
+        else if length moveset < 4
+            then moveset ++ [newmove]
+            else (tail moveset) ++ [newmove]
+    ) [] . map snd . filter ((<= lvl) . fst) $ s^.learnset
 
 allSpecies :: [Species]
 allSpecies =

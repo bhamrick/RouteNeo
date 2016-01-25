@@ -214,7 +214,7 @@ defeatTrainerWithRanges offset =
                 liftIO $ printf "%s (0x%X)\n" (show (t^.tClass)) (t^.tOffset)
         runTrainer offset defeatBattleWithRanges
 
-simulateTrainerBattle :: (MonadRoute m, MonadRandom m) => Integer -> BattleT m PlayerBattleAction -> m (BattleResult, BattleState)
+simulateTrainerBattle :: (MonadIO m, MonadRoute m, MonadRandom m) => Integer -> BattleT m PlayerBattleAction -> m (BattleResult, BattleState)
 simulateTrainerBattle offset playerStrategy =
     do
         case Map.lookup offset trainersByOffset of
